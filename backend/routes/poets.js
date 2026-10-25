@@ -9,11 +9,12 @@ const fs = require("fs");
 const normalizeStoredImagePath = (value) => {
   if (!value || typeof value !== "string") return "";
   const normalized = value.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
-  if (!normalized || /^https?:\/\//i.test(normalized)) return normalized;
-  const cleaned = normalized
-    .replace(/^\/+/, "")
-    .replace(/^.*?(?:uploads\/)?/, "");
-  return `/${(process.env.UPLOAD_DIR || "uploads").replace(/\\/g, "/").replace(/^\//, "")}/${cleaned}`;
+  if (!normalized) return "";
+  if (/^https?:\/\//i.test(normalized) && !normalized.includes("/uploads/")) return normalized;
+  const match = normalized.match(/(?:^|.*?\/uploads\/)([^/?#]+)$/i);
+  const filename = match ? match[1] : normalized.split("/").filter(Boolean).pop();
+  if (!filename || filename === "uploads") return "";
+  return `/uploads/${filename}`;
 };
 
 // const upload = multer({ dest: process.env.UPLOAD_DIR || 'uploads/' });
@@ -144,73 +145,94 @@ router.get("/", async (req, res) => {
 //   }
 // });
 
-router.post("/", auth, upload.single("image"), async (req, res) => {
-  try {
-    const body = normalizePoetBody(req.body || {});
-
-    if (req.file) {
-      const filePath = `/uploads/${req.file.filename}`;
-
-      body.avatar = filePath;
-      body.image = filePath;
+router.post("/", auth, (req, res) => {
+  upload.single("image")(req, res, async (err) => {
+    if (err) {
+      console.error("Multer error in poets POST:", err);
+      return res.status(400).json({ success: false, message: err.message });
     }
 
-    const item = new Poet(body);
-    await item.save();
+    try {
+      const body = normalizePoetBody(req.body || {});
 
-    return res.status(201).json({
-      success: true,
-      message: "Poet created successfully",
-      data: item,
-    });
-  } catch (err) {
-    console.error("Create poet error:", err);
+      if (req.file) {
+        const filePath = `/uploads/${req.file.filename}`;
+        body.avatar = filePath;
+        body.image = filePath;
+      } else if (req.body && (req.body.image || req.body.avatar)) {
+        const cleaned = normalizeStoredImagePath(req.body.image || req.body.avatar);
+        if (cleaned) {
+          body.avatar = cleaned;
+          body.image = cleaned;
+        }
+      }
 
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create poet",
-      error: err.message,
-    });
-  }
-});
+      const item = new Poet(body);
+      await item.save();
 
-router.put("/:id", auth, upload.single("image"), async (req, res) => {
-  try {
-    const body = normalizePoetBody(req.body || {});
-
-    if (req.file) {
-      const filePath = `/uploads/${req.file.filename}`;
-
-      body.avatar = filePath;
-      body.image = filePath;
-    }
-
-    const item = await Poet.findByIdAndUpdate(req.params.id, body, {
-      new: true,
-      runValidators: true,
-    });
-
-    if (!item) {
-      return res.status(404).json({
+      return res.status(201).json({
+        success: true,
+        message: "Poet created successfully",
+        data: serializePoet(item, req),
+      });
+    } catch (createErr) {
+      console.error("Create poet error:", createErr);
+      return res.status(500).json({
         success: false,
-        message: "Poet not found",
+        message: "Failed to create poet",
+        error: createErr.message,
       });
     }
+  });
+});
 
-    return res.json({
-      success: true,
-      message: "Poet updated successfully",
-      data: item,
-    });
-  } catch (err) {
-    console.error("Update poet error:", err);
+router.put("/:id", auth, (req, res) => {
+  upload.single("image")(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
 
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update poet",
-      error: err.message,
-    });
-  }
+    try {
+      const body = normalizePoetBody(req.body || {});
+
+      if (req.file) {
+        const filePath = `/uploads/${req.file.filename}`;
+        body.avatar = filePath;
+        body.image = filePath;
+      } else if (req.body && (req.body.image || req.body.avatar)) {
+        const cleaned = normalizeStoredImagePath(req.body.image || req.body.avatar);
+        if (cleaned) {
+          body.avatar = cleaned;
+          body.image = cleaned;
+        }
+      }
+
+      const item = await Poet.findByIdAndUpdate(req.params.id, body, {
+        new: true,
+        runValidators: true,
+      });
+
+      if (!item) {
+        return res.status(404).json({
+          success: false,
+          message: "Poet not found",
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: "Poet updated successfully",
+        data: serializePoet(item, req),
+      });
+    } catch (updateErr) {
+      console.error("Update poet error:", updateErr);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update poet",
+        error: updateErr.message,
+      });
+    }
+  });
 });
 
 router.get("/:id", async (req, res) => {

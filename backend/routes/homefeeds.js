@@ -9,11 +9,12 @@ const path = require("path");
 const normalizeStoredImagePath = (value) => {
   if (!value || typeof value !== "string") return "";
   const normalized = value.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
-  if (!normalized || /^https?:\/\//i.test(normalized)) return normalized;
-  const cleaned = normalized
-    .replace(/^\/+/, "")
-    .replace(/^.*?(?:uploads\/)?/, "");
-  return `/${(process.env.UPLOAD_DIR || "uploads").replace(/\\/g, "/").replace(/^\//, "")}/${cleaned}`;
+  if (!normalized) return "";
+  if (/^https?:\/\//i.test(normalized) && !normalized.includes("/uploads/")) return normalized;
+  const match = normalized.match(/(?:^|.*?\/uploads\/)([^/?#]+)$/i);
+  const filename = match ? match[1] : normalized.split("/").filter(Boolean).pop();
+  if (!filename || filename === "uploads") return "";
+  return `/uploads/${filename}`;
 };
 
 // const upload = multer({ dest: process.env.UPLOAD_DIR || 'uploads/' });
@@ -107,12 +108,8 @@ const normalizeHomeFeedBody = (body = {}) => {
     };
   }
 
-  if (
-    normalized.likes === undefined ||
-    normalized.likes === null ||
-    normalized.likes === ""
-  )
-    normalized.likes = 0;
+  const parsedLikes = Number(normalized.likes);
+  normalized.likes = Number.isNaN(parsedLikes) ? 0 : parsedLikes;
   if (
     normalized.comments === undefined ||
     normalized.comments === null ||
@@ -177,14 +174,87 @@ router.get("/", async (req, res) => {
   );
 });
 
-router.post(
-  "/",
-  auth,
+const getImagePathFromBody = (body = {}) => {
+  const value = body?.image || body?.avatar || "";
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("/uploads/")) return trimmed;
+  const match = trimmed.match(/(?:^|\/uploads\/)([^/?#]+\.(?:jpe?g|png|webp))$/i);
+  if (match) return `/uploads/${match[1]}`;
+  const filename = trimmed.split("/").filter(Boolean).pop();
+  if (filename && /\.(jpe?g|png|webp)$/i.test(filename)) {
+    return `/uploads/${filename}`;
+  }
+  return "";
+};
+
+const saveBase64Image = (rawString) => {
+  if (!rawString || typeof rawString !== "string") return "";
+  if (!rawString.startsWith("data:image/") && rawString.length < 500) return "";
+  try {
+    const mimeMatch = rawString.match(/^data:image\/([a-zA-Z0-9.+-]+);base64,/);
+    const cleanBase64 = rawString.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, "");
+    const buffer = Buffer.from(cleanBase64, "base64");
+    if (buffer.length === 0) return "";
+    const ext = mimeMatch && mimeMatch[1] ? `.${mimeMatch[1].replace("jpeg", "jpg")}` : ".jpg";
+    const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}-upload${ext}`;
+    const uploadDir = path.resolve(__dirname, "..", process.env.UPLOAD_DIR || "uploads");
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    fs.writeFileSync(path.join(uploadDir, filename), buffer);
+    return `/uploads/${filename}`;
+  } catch (e) {
+    return "";
+  }
+};
+
+const applyStoredImageFields = (body = {}, files = {}) => {
+  const file =
+    (files.image && files.image[0]) || (files.avatar && files.avatar[0]);
+
+  if (file) {
+    const saved = `/uploads/${file.filename}`;
+    body.image = saved;
+    body.avatar = saved;
+    return body;
+  }
+
+  // Support base64 string directly in text body
+  const rawImage = body?.image || body?.avatar || body?.imageBase64 || "";
+  if (typeof rawImage === "string" && (rawImage.startsWith("data:image/") || rawImage.length > 500)) {
+    const savedFromBase64 = saveBase64Image(rawImage);
+    if (savedFromBase64) {
+      body.image = savedFromBase64;
+      body.avatar = savedFromBase64;
+      return body;
+    }
+  }
+
+  const directImage = getImagePathFromBody(body);
+  if (directImage) {
+    body.image = directImage;
+    body.avatar =
+      body.avatar &&
+      typeof body.avatar === "string" &&
+      body.avatar.trim().startsWith("/uploads/")
+        ? body.avatar.trim()
+        : directImage;
+  }
+
+  return body;
+};
+
+router.post("/", auth, (req, res) => {
   upload.fields([
     { name: "image", maxCount: 1 },
     { name: "avatar", maxCount: 1 },
-  ]),
-  async (req, res) => {
+  ])(req, res, async (err) => {
+    if (err) {
+      console.error("Multer error in homefeeds POST:", err);
+      return res.status(400).json({ message: err.message });
+    }
+
     try {
       let body = normalizeHomeFeedBody(req.body || {});
       body = applyStoredImageFields(body, req.files || {});
@@ -199,17 +269,17 @@ router.post(
       const item = new HomeFeed(body);
       await item.save();
       res.json({
-        ...item.toObject(),
+        ...serializeHomeFeed(item, req),
         comments: normalizeCommentList(item.comments)
           .map(normalizeStoredComment)
           .filter(Boolean),
       });
-    } catch (err) {
-      console.error("Create homefeed error:", err);
+    } catch (createErr) {
+      console.error("Create homefeed error:", createErr);
       res.status(500).json({ message: "Failed to create home feed" });
     }
-  },
-);
+  });
+});
 
 router.get("/:id", async (req, res) => {
   const item = await HomeFeed.findById(req.params.id);
@@ -222,11 +292,15 @@ router.get("/:id", async (req, res) => {
   });
 });
 
-router.put(
-  "/:id",
-  auth,
-  upload.fields([{ name: "image" }, { name: "avatar" }]),
-  async (req, res) => {
+router.put("/:id", auth, (req, res) => {
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "avatar", maxCount: 1 },
+  ])(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message });
+    }
+
     try {
       let body = normalizeHomeFeedBody(req.body || {});
       body = applyStoredImageFields(body, req.files || {});
@@ -241,20 +315,21 @@ router.put(
       const item = await HomeFeed.findByIdAndUpdate(req.params.id, body, {
         new: true,
       });
-      if (!item)
+      if (!item) {
         return res.status(404).json({ message: "Home feed not found" });
+      }
       res.json({
-        ...item.toObject(),
+        ...serializeHomeFeed(item, req),
         comments: normalizeCommentList(item.comments)
           .map(normalizeStoredComment)
           .filter(Boolean),
       });
-    } catch (err) {
-      console.error("Update homefeed error:", err);
+    } catch (updateErr) {
+      console.error("Update homefeed error:", updateErr);
       res.status(500).json({ message: "Failed to update home feed" });
     }
-  },
-);
+  });
+});
 
 router.delete("/:id", auth, async (req, res) => {
   await HomeFeed.findByIdAndDelete(req.params.id);
@@ -300,32 +375,3 @@ router.post("/:id/comments", auth, async (req, res) => {
 
 module.exports = router;
 
-const getImagePathFromBody = (body = {}) => {
-  const value = body?.image || body?.avatar || "";
-  if (typeof value !== "string") return "";
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  if (trimmed.startsWith("/uploads/")) return trimmed;
-  return "";
-};
-
-const applyStoredImageFields = (body = {}, files = {}) => {
-  const directImage = getImagePathFromBody(body);
-  const file =
-    (files.image && files.image[0]) || (files.avatar && files.avatar[0]);
-
-  if (file) {
-    const saved = `/uploads/${file.filename}`;
-    body.image = saved;
-    body.avatar = saved;
-    return body;
-  }
-
-  if (directImage) {
-    body.image = directImage;
-    body.avatar = body.avatar && typeof body.avatar === "string" && body.avatar.trim().startsWith("/uploads/") ? body.avatar.trim() : directImage;
-  }
-
-  return body;
-};

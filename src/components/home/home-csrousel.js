@@ -12,13 +12,7 @@ import { widthPercentageToDP } from "react-native-responsive-screen";
 
 const windowWidth = Dimensions.get("window").width;
 
-const getApiBase = () => {
-  const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
-  if (envHost) return envHost.replace(/\/$/, "");
-  if (typeof window !== "undefined" && window.location)
-    return `http://${window.location.hostname}:4000`;
-  return "http://localhost:4000";
-};
+import { getApiBase, normalizeImageUrl } from "../../utils/api";
 
 function HomeCarousel() {
   const flatListRef = useRef(null);
@@ -81,7 +75,9 @@ function HomeCarousel() {
         keyExtractor={(item, index) => String(item._id || index)}
         renderItem={({ item }) => (
           <ImageBackground
-            source={item.image ? { uri: `${getApiBase()}${item.image}` } : null}
+            source={
+              item.image ? { uri: normalizeImageUrl(item.image) } : null
+            }
             style={styles.carouselImage}
             imageStyle={{ resizeMode: "cover" }}
           >

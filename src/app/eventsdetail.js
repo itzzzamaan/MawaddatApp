@@ -16,26 +16,7 @@ import { widthPercentageToDP as wp } from "react-native-responsive-screen";
 
 const ACCENT = "#2C1810";
 
-const getApiBase = () => {
-  const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
-  if (envHost) return envHost.replace(/\/$/, "");
-  if (typeof window !== "undefined" && window.location)
-    return `http://${window.location.hostname}:4000`;
-  return "http://localhost:4000";
-};
-
-const normalizeImageUrl = (value) => {
-  if (!value || typeof value !== "string") return "";
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-
-  const cleaned = trimmed.replace(/\\/g, "/").replace(/\/+/g, "/");
-  const filename = cleaned.includes("/uploads/") ? cleaned.split("/uploads/").pop() : cleaned.split("/").filter(Boolean).pop();
-
-  if (!filename) return "";
-  return `${getApiBase()}/uploads/${filename}`;
-};
+import { getApiBase, normalizeImageUrl } from "../utils/api";
 
 export default function ShayariEventDetails() {
   const router = useRouter();

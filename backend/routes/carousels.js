@@ -9,11 +9,12 @@ const path = require("path");
 const normalizeStoredImagePath = (value) => {
   if (!value || typeof value !== "string") return "";
   const normalized = value.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
-  if (!normalized || /^https?:\/\//i.test(normalized)) return normalized;
-  const cleaned = normalized
-    .replace(/^\/+/, "")
-    .replace(/^.*?(?:uploads\/)?/, "");
-  return `/${(process.env.UPLOAD_DIR || "uploads").replace(/\\/g, "/").replace(/^\//, "")}/${cleaned}`;
+  if (!normalized) return "";
+  if (/^https?:\/\//i.test(normalized) && !normalized.includes("/uploads/")) return normalized;
+  const match = normalized.match(/(?:^|.*?\/uploads\/)([^/?#]+)$/i);
+  const filename = match ? match[1] : normalized.split("/").filter(Boolean).pop();
+  if (!filename || filename === "uploads") return "";
+  return `/uploads/${filename}`;
 };
 
 // const upload = multer({ dest: process.env.UPLOAD_DIR || 'uploads/' });
@@ -138,49 +139,48 @@ router.get("/", async (req, res) => {
 //   }
 // });
 
-router.post("/", auth, upload.single("image"), async (req, res) => {
-  try {
-    console.log("Upload directory:", UPLOAD_DIR);
-    console.log("Request body:", req.body);
-    console.log("Uploaded file:", req.file);
-
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Image file was not received",
-      });
+router.post("/", auth, (req, res) => {
+  upload.single("image")(req, res, async (err) => {
+    if (err) {
+      console.error("Multer error in carousels:", err);
+      return res.status(400).json({ success: false, message: err.message });
     }
 
-    if (req.file.size === 0) {
-      return res.status(400).json({
+    try {
+      const body = normalizeCarouselBody(req.body || {});
+
+      if (req.file) {
+        body.image = `/uploads/${req.file.filename}`;
+      } else if (req.body && req.body.image) {
+        const cleaned = normalizeStoredImagePath(req.body.image);
+        if (cleaned) body.image = cleaned;
+      }
+
+      if (!body.image) {
+        return res.status(400).json({
+          success: false,
+          message: "Image is required for carousel slide",
+        });
+      }
+
+      const item = new CarouselSlide(body);
+      await item.save();
+
+      return res.status(201).json({
+        success: true,
+        message: "Carousel created successfully",
+        data: serializeCarousel(item, req),
+        imageUrl: body.image,
+      });
+    } catch (createErr) {
+      console.error("Create carousel error:", createErr);
+      return res.status(500).json({
         success: false,
-        message: "Uploaded file is empty",
+        message: "Failed to create carousel slide",
+        error: createErr.message,
       });
     }
-
-    const body = normalizeCarouselBody(req.body || {});
-
-    // Store only the relative URL in MongoDB.
-    body.image = `/uploads/${req.file.filename}`;
-
-    const item = new CarouselSlide(body);
-    await item.save();
-
-    return res.status(201).json({
-      success: true,
-      message: "Carousel created successfully",
-      data: item,
-      imageUrl: body.image,
-    });
-  } catch (err) {
-    console.error("Create carousel error:", err);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create carousel slide",
-      error: err.message,
-    });
-  }
+  });
 });
 
 router.get("/:id", async (req, res) => {
@@ -189,20 +189,32 @@ router.get("/:id", async (req, res) => {
   res.json(serializeCarousel(item, req));
 });
 
-router.put("/:id", auth, upload.single("image"), async (req, res) => {
-  try {
-    const body = normalizeCarouselBody(req.body || {});
-    if (req.file)
-      body.image =
-        "/" + (process.env.UPLOAD_DIR || "uploads") + "/" + req.file.filename;
-    const item = await CarouselSlide.findByIdAndUpdate(req.params.id, body, {
-      new: true,
-    });
-    res.json(item);
-  } catch (err) {
-    console.error("Update carousel error:", err);
-    res.status(500).json({ message: "Failed to update carousel slide" });
-  }
+router.put("/:id", auth, (req, res) => {
+  upload.single("image")(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    try {
+      const body = normalizeCarouselBody(req.body || {});
+      if (req.file) {
+        body.image = `/uploads/${req.file.filename}`;
+      } else if (req.body && req.body.image) {
+        const cleaned = normalizeStoredImagePath(req.body.image);
+        if (cleaned) body.image = cleaned;
+      }
+
+      const item = await CarouselSlide.findByIdAndUpdate(req.params.id, body, {
+        new: true,
+      });
+      if (!item) {
+        return res.status(404).json({ message: "Carousel slide not found" });
+      }
+      res.json(serializeCarousel(item, req));
+    } catch (updateErr) {
+      console.error("Update carousel error:", updateErr);
+      res.status(500).json({ message: "Failed to update carousel slide" });
+    }
+  });
 });
 
 router.delete("/:id", auth, async (req, res) => {

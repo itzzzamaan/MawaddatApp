@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Navbar from "../components/Navbar";
 import { useSavedPosts } from "../contexts/SavedPostsContext";
+import { normalizeImageUrl } from "../utils/api";
 
 const PAGE_BG = "#F8F6F2";
 const CARD_BG = "#FFFDF9";
@@ -64,7 +65,10 @@ export default function SavedProgramsScreen() {
             >
               <View style={styles.imageContainer}>
                 {item.image ? (
-                  <Image source={{ uri: item.image }} style={styles.image} />
+                  <Image
+                    source={{ uri: normalizeImageUrl(item.image) }}
+                    style={styles.image}
+                  />
                 ) : (
                   <View style={styles.imageFallback}>
                     <Ionicons name="calendar" size={28} color={ACCENT} />

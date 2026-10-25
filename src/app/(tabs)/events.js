@@ -17,7 +17,7 @@ import { widthPercentageToDP as wp } from "react-native-responsive-screen";
 import Navbar from "../../components/Navbar";
 import { Colors } from "../../constants/theme";
 import { useSavedPosts } from "../../contexts/SavedPostsContext";
-import { getApiBase } from "../../utils/api";
+import { getApiBase, normalizeImageUrl } from "../../utils/api";
 
 const ACCENT = "#C49A32";
 const TEXT_PRIMARY = Colors.light.text;
@@ -54,9 +54,9 @@ function EventCard({ item, favorite, onFavorite, onPress }) {
       <View style={styles.imageContainer}>
         <Image
           source={{
-            uri: item.image
-              ? `${getApiBase()}${item.image}`
-              : "https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=1200",
+            uri:
+              normalizeImageUrl(item.image) ||
+              "https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=1200",
           }}
           style={styles.eventImage}
         />

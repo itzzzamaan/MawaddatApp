@@ -17,16 +17,13 @@ const app = express();
 app.use(
   cors({
     origin: "*", // Allow all origins
-    methods: ["GET", "POST", "PUT", "DELETE"], // Allow specific HTTP methods
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"], // Allow specific HTTP methods
     allowedHeaders: ["Content-Type", "Authorization"], // Allow specific headers
-    credentials: true, // Allow credentials (cookies, authorization headers, etc.)
+    credentials: true,
   }),
 );
-app.use(express.json());
-
-// const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
-// if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-// app.use('/uploads', express.static(path.join(__dirname, UPLOAD_DIR)));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 const UPLOAD_DIR = path.resolve(__dirname, process.env.UPLOAD_DIR || "uploads");
 
@@ -34,7 +31,10 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-app.use("/uploads", express.static(UPLOAD_DIR));
+app.use("/uploads", express.static(UPLOAD_DIR, {
+  etag: true,
+  maxAge: "1d",
+}));
 console.log("Upload directory:", UPLOAD_DIR);
 
 app.use("/api/auth", authRoutes);

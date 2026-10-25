@@ -25,13 +25,7 @@ import gradientOverlay from "../app/assets/images/gradientOverlay.png";
 
 const { width } = Dimensions.get("window");
 
-const getApiBase = () => {
-  const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
-  if (envHost) return envHost.replace(/\/$/, "");
-  if (typeof window !== "undefined" && window.location)
-    return `http://${window.location.hostname}:4000`;
-  return "http://localhost:4000";
-};
+import { getApiBase, normalizeImageUrl } from "../utils/api";
 
 export default function SplashCarousel() {
   const [slides, setSlides] = useState([]);
@@ -105,7 +99,7 @@ export default function SplashCarousel() {
     const visibleSocials = Object.entries(socialLinks).filter(
       ([, value]) => typeof value === "string" && value.trim().length > 0
     );
-    const imageSource = item.image ? { uri: `${getApiBase()}${item.image}` } : null;
+    const imageSource = item.image ? { uri: normalizeImageUrl(item.image) } : null;
 
     return (
       <ImageBackground

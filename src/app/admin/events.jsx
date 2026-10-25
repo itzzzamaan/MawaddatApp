@@ -32,8 +32,6 @@ const getApiBase = () => {
 const API = `${getApiBase()}/api`;
 
 const resolveImageUrl = (value) => {
-  if (!value) return null;
-  if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) return value;
   return normalizeImageUrl(value);
 };
 
@@ -50,10 +48,11 @@ const emptyEvent = {
   featured: false,
 };
 
-const uploadImageFile = async (localUri, authTokenValue) => {
+const uploadImageFile = async (localUri, authTokenValue, base64Value) => {
   if (!localUri || localUri.startsWith('http')) return localUri || null;
   return uploadImageToApi({
     uri: localUri,
+    base64: base64Value,
     authToken: authTokenValue,
     apiBase: getApiBase(),
     fallbackName: 'event.jpg',
@@ -114,7 +113,7 @@ export default function AdminEvents() {
     try {
       let imagePath = null;
       if (image && !image.startsWith('http')) {
-        imagePath = await uploadImageFile(image, authToken);
+        imagePath = await uploadImageFile(image, authToken, imageBase64);
       }
 
       const payload = new FormData();
@@ -180,7 +179,7 @@ export default function AdminEvents() {
     try {
       let imagePath = null;
       if (image && !image.startsWith('http')) {
-        imagePath = await uploadImageFile(image, authToken);
+        imagePath = await uploadImageFile(image, authToken, imageBase64);
       }
 
       const payload = new FormData();
