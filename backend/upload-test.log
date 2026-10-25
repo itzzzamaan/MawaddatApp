@@ -1,0 +1,7 @@
+Upload directory: C:\Users\HP\Mawaddat\MawaddatApp\backend\uploads
+Mongo connected
+Server running on http://0.0.0.0:4000
+ADMIN LOGIN ATTEMPT: { email: 'admin@test.com', passwordLength: 8 }
+ADMIN LOOKUP RESULT: true admin@test.com
+ADMIN PASSWORD CHECK: true
+ADMIN LOGIN SUCCESS: admin@test.com
