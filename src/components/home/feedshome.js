@@ -51,16 +51,6 @@ const getApiBase = () => {
 };
 
 const resolveImageUrl = (value) => {
-  if (!value) return null;
-  if (typeof value !== "string") return null;
-  if (value.startsWith("http://") || value.startsWith("https://")) return value;
-
-  const cleaned = value.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
-  const match = cleaned.match(/(?:^|\/uploads\/)([^/?#]+\.(?:jpe?g|png|webp))$/i) || cleaned.match(/([^/?#]+\.(?:jpe?g|png|webp))$/i);
-  if (match) {
-    return normalizeImageUrl(match[0]);
-  }
-
   return normalizeImageUrl(value);
 };
 

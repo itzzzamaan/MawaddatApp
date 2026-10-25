@@ -10,13 +10,10 @@ const normalizeStoredImagePath = (value) => {
   if (!value || typeof value !== "string") return "";
   const normalized = value.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
   if (!normalized) return "";
-  if (/^https?:\/\//i.test(normalized)) {
-    const match = normalized.match(/(?:^|\/uploads\/)([^/?#]+\.(?:jpe?g|png|webp))$/i);
-    return match ? `/uploads/${match[1]}` : "";
-  }
-
-  const filename = normalized.match(/(?:^|\/uploads\/)([^/?#]+\.(?:jpe?g|png|webp))$/i)?.[1] || normalized.split("/").filter(Boolean).pop();
-  if (!filename || !/\.(jpe?g|png|webp)$/i.test(filename)) return "";
+  if (/^https?:\/\//i.test(normalized) && !normalized.includes("/uploads/")) return normalized;
+  const match = normalized.match(/(?:^|.*?\/uploads\/)([^/?#]+)$/i);
+  const filename = match ? match[1] : normalized.split("/").filter(Boolean).pop();
+  if (!filename || filename === "uploads") return "";
   return `/uploads/${filename}`;
 };
 
@@ -154,43 +151,49 @@ router.get("/", async (req, res) => {
 });
 
 // Create
-router.post("/", auth, upload.single("image"), async (req, res) => {
-  try {
-    const body = normalizeEventBody(req.body || {});
-    applyStoredImageFields(body, req.file);
-
-    if (!body.image) {
-      return res.status(400).json({
-        success: false,
-        message: "Image file is required",
-      });
+router.post("/", auth, (req, res) => {
+  upload.single("image")(req, res, async (err) => {
+    if (err) {
+      console.error("Multer error in events POST:", err);
+      return res.status(400).json({ success: false, message: err.message });
     }
 
-    body.image = normalizeStoredImagePath(body.image);
-    if (!body.image) {
-      return res.status(400).json({
+    try {
+      const body = normalizeEventBody(req.body || {});
+      applyStoredImageFields(body, req.file);
+
+      if (!body.image) {
+        return res.status(400).json({
+          success: false,
+          message: "Image file is required",
+        });
+      }
+
+      body.image = normalizeStoredImagePath(body.image);
+      if (!body.image) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid image file is required",
+        });
+      }
+
+      const item = new Event(body);
+      await item.save();
+
+      return res.status(201).json({
+        success: true,
+        message: "Event created successfully",
+        data: serializeEvent(item, req),
+      });
+    } catch (createErr) {
+      console.error("Create event error:", createErr);
+      return res.status(500).json({
         success: false,
-        message: "Image file is required",
+        message: "Failed to create event",
+        error: createErr.message,
       });
     }
-
-    const item = new Event(body);
-    await item.save();
-
-    return res.status(201).json({
-      success: true,
-      message: "Event created successfully",
-      data: item,
-    });
-  } catch (err) {
-    console.error("Create event error:", err);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create event",
-      error: err.message,
-    });
-  }
+  });
 });
 
 // Get
@@ -201,19 +204,31 @@ router.get("/:id", async (req, res) => {
 });
 
 // Update
-router.put("/:id", auth, upload.single("image"), async (req, res) => {
-  try {
-    const body = normalizeEventBody(req.body || {});
-    applyStoredImageFields(body, req.file);
-    if (body.image) body.image = normalizeStoredImagePath(body.image);
-    const item = await Event.findByIdAndUpdate(req.params.id, body, {
-      new: true,
-    });
-    res.json(item);
-  } catch (err) {
-    console.error("Update event error:", err);
-    res.status(500).json({ message: "Failed to update event" });
-  }
+router.put("/:id", auth, (req, res) => {
+  upload.single("image")(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+
+    try {
+      const body = normalizeEventBody(req.body || {});
+      applyStoredImageFields(body, req.file);
+      if (body.image) body.image = normalizeStoredImagePath(body.image);
+
+      const item = await Event.findByIdAndUpdate(req.params.id, body, {
+        new: true,
+      });
+
+      if (!item) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+
+      res.json(serializeEvent(item, req));
+    } catch (updateErr) {
+      console.error("Update event error:", updateErr);
+      res.status(500).json({ message: "Failed to update event" });
+    }
+  });
 });
 
 // Delete

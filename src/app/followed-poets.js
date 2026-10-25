@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Navbar from "../components/Navbar";
 import { useSavedPosts } from "../contexts/SavedPostsContext";
+import { normalizeImageUrl } from "../utils/api";
 
 const PAGE_BG = "#F8F6F2";
 const CARD_BG = "#FFFDF9";
@@ -68,7 +69,10 @@ export default function FollowedPoetsScreen() {
               <View style={styles.cardHeader}>
                 <View style={styles.avatarWrap}>
                   {item.image ? (
-                    <Image source={{ uri: item.image }} style={styles.avatar} />
+                    <Image
+                      source={{ uri: normalizeImageUrl(item.image) }}
+                      style={styles.avatar}
+                    />
                   ) : (
                     <View style={styles.avatarFallback}>
                       <Ionicons name="person" size={18} color={ACCENT} />

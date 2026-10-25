@@ -54,9 +54,6 @@ const getApiBase = () => {
 };
 
 const resolveImageUrl = (value) => {
-  if (!value) return "";
-  if (typeof value !== "string") return "";
-  if (value.startsWith("http://") || value.startsWith("https://")) return value;
   return normalizeImageUrl(value);
 };
 

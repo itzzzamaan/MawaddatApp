@@ -14,14 +14,7 @@ import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
-
-const getApiBase = () => {
-  const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
-  if (envHost) return envHost.replace(/\/$/, "");
-  if (typeof window !== "undefined" && window.location)
-    return `http://${window.location.hostname}:4000`;
-  return "http://localhost:4000";
-};
+import { getApiBase, normalizeImageUrl } from "../../utils/api";
 
 export default function Explore() {
   const [items, setItems] = useState([]);
@@ -126,9 +119,9 @@ export default function Explore() {
             <View style={styles.imageWrapper}>
               <Image
                 source={{
-                  uri: item.image
-                    ? `${getApiBase()}${item.image}`
-                    : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500",
+                  uri:
+                    normalizeImageUrl(item.image) ||
+                    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500",
                 }}
                 style={styles.image}
               />

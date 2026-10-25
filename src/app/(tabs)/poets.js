@@ -15,7 +15,7 @@ import {
 } from "react-native";
 
 import Navbar from "../../components/Navbar";
-import { getApiBase } from "../../utils/api";
+import { getApiBase, normalizeImageUrl } from "../../utils/api";
 
 const ACCENT = "#2C1810";
 const TEXT_PRIMARY = "#2C1810";
@@ -90,9 +90,9 @@ export default function BookingScreen() {
     >
       <Image
         source={{
-          uri: item.image
-            ? `${getApiBase()}${item.image}`
-            : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500",
+          uri:
+            normalizeImageUrl(item.image) ||
+            "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500",
         }}
         style={styles.poetImage}
       />
