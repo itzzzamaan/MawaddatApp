@@ -2,18 +2,17 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 export const getApiBase = () => {
-  // Dev web: the backend runs on the page's own host; a LAN IP baked into
-  // EXPO_PUBLIC_API_URL is usually unreachable from the browser.
-  if (Platform.OS === "web" && __DEV__ && typeof window !== "undefined") {
-    return `http://${window.location.hostname}:4000`;
-  }
-
   const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
   if (envHost) {
     const normalized = envHost.replace(/\/$/, "");
     return /^https?:\/\//i.test(normalized)
       ? normalized
       : `http://${normalized}`;
+  }
+
+  // Use the local backend only when no API URL has been configured.
+  if (Platform.OS === "web" && __DEV__ && typeof window !== "undefined") {
+    return `http://${window.location.hostname}:4000`;
   }
 
   const expoHost =

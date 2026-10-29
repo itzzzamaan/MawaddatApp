@@ -1,9 +1,8 @@
 require("dotenv").config();
 const express = require("express");
-const mongoose = require("mongoose");
 const cors = require("cors");
 const path = require("path");
-const fs = require("fs");
+const { connectToDatabase } = require("./database");
 
 const authRoutes = require("./routes/auth");
 const eventsRoutes = require("./routes/events");
@@ -13,6 +12,7 @@ const carouselsRoutes = require("./routes/carousels");
 const usersRoutes = require("./routes/users");
 const uploadsRoutes = require("./routes/uploads");
 const notificationsRoutes = require("./routes/notifications");
+const ImageAsset = require("./models/ImageAsset");
 
 const app = express();
 app.use(
@@ -25,18 +25,41 @@ app.use(
 );
 app.use(express.json());
 
-// const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
-// if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-// app.use('/uploads', express.static(path.join(__dirname, UPLOAD_DIR)));
-
 const UPLOAD_DIR = path.resolve(__dirname, process.env.UPLOAD_DIR || "uploads");
 
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
 app.use("/uploads", express.static(UPLOAD_DIR));
-console.log("Upload directory:", UPLOAD_DIR);
+
+app.use("/api", async (req, res, next) => {
+  try {
+    await connectToDatabase();
+    next();
+  } catch (error) {
+    console.error("MongoDB connection failed:", error.name || "UnknownError");
+    res.status(503).json({ message: "Database unavailable." });
+  }
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", database: "connected" });
+});
+
+app.get("/uploads/:filename", async (req, res, next) => {
+  const match = req.params.filename.match(/^([a-f\d]{24})\.(?:jpe?g|png|webp)$/i);
+  if (!match) return next();
+
+  try {
+    await connectToDatabase();
+    const image = await ImageAsset.findById(match[1]);
+    if (!image) return res.sendStatus(404);
+
+    res.set("Content-Type", image.contentType);
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    return res.send(image.data);
+  } catch (error) {
+    console.error("Image retrieval failed:", error.name || "UnknownError");
+    return res.status(503).json({ message: "Image storage unavailable." });
+  }
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/events", eventsRoutes);

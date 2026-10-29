@@ -4,9 +4,9 @@ const Event = require("../models/Event");
 const { notifyAllUsersAboutEvent } = require("../notificationService");
 const auth = require("../middleware/auth");
 const adminOnly = require("../middleware/adminOnly");
+const { saveImageAsset } = require("../database");
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 
 const normalizeStoredImagePath = (value) => {
   if (!value || typeof value !== "string") return "";
@@ -32,15 +32,13 @@ const getImagePathFromBody = (body = {}) => {
   return "";
 };
 
-const applyStoredImageFields = (body = {}, file = null) => {
+const applyStoredImageFields = async (body = {}, file = null) => {
   const directImage = getImagePathFromBody(body);
 
-  if (file && file.path) {
-    const saved = normalizeStoredImagePath(file.path);
-    if (saved) {
-      body.image = saved;
-      return body;
-    }
+  if (file && file.buffer) {
+    const saved = await saveImageAsset(file.buffer, file.mimetype);
+    body.image = saved.path;
+    return body;
   }
 
   if (directImage) {
@@ -52,31 +50,8 @@ const applyStoredImageFields = (body = {}, file = null) => {
 
 // const upload = multer({ dest: process.env.UPLOAD_DIR || 'uploads/' });
 
-const UPLOAD_DIR = path.resolve(
-  __dirname,
-  "..",
-  process.env.UPLOAD_DIR || "uploads",
-);
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOAD_DIR);
-  },
-
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname || "").toLowerCase();
-    const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-
-    cb(null, filename);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024,
   },
@@ -159,7 +134,7 @@ router.get("/", async (req, res) => {
 router.post("/", auth, adminOnly, upload.single("image"), async (req, res) => {
   try {
     const body = normalizeEventBody(req.body || {});
-    applyStoredImageFields(body, req.file);
+    await applyStoredImageFields(body, req.file);
 
     if (!body.image) {
       return res.status(400).json({
@@ -207,7 +182,7 @@ router.get("/:id", async (req, res) => {
 router.put("/:id", auth, upload.single("image"), async (req, res) => {
   try {
     const body = normalizeEventBody(req.body || {});
-    applyStoredImageFields(body, req.file);
+    await applyStoredImageFields(body, req.file);
     if (body.image) body.image = normalizeStoredImagePath(body.image);
     const item = await Event.findByIdAndUpdate(req.params.id, body, {
       new: true,

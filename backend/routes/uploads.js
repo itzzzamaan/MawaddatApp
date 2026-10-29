@@ -2,55 +2,8 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 const auth = require("../middleware/auth");
-
-const sanitizeStoredImagePath = (value) => {
-  if (!value || typeof value !== "string") return "";
-  const normalized = value.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
-  if (!normalized) return "";
-  if (/^https?:\/\//i.test(normalized)) return normalized;
-
-  const uploadRoot = (process.env.UPLOAD_DIR || "uploads").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-  const matches = normalized.match(/(?:^|.*?\/uploads\/)([^/?#]+)$/i) || normalized.match(/(?:^|.*?\/)([^/?#]+\.(?:jpe?g|png|webp))$/i);
-  const fileName = matches ? matches[1] : normalized.split("/").filter(Boolean).pop();
-  if (!fileName) return "";
-  return `/${uploadRoot}/${fileName}`;
-};
-
-const normalizeUploadPath = (value) => {
-  const cleaned = sanitizeStoredImagePath(value);
-  if (!cleaned) return "";
-  return cleaned.startsWith("/") ? cleaned : `/${cleaned}`;
-};
-
-// const uploadDir = process.env.UPLOAD_DIR || "uploads";
-
-// if (!fs.existsSync(uploadDir)) {
-//   fs.mkdirSync(uploadDir, { recursive: true });
-// }
-
-const uploadDir = path.resolve(
-  __dirname,
-  "..",
-  process.env.UPLOAD_DIR || "uploads",
-);
-
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname || "").toLowerCase();
-    const base = (file.originalname || "upload")
-      .replace(/\.[^/.]+$/, "")
-      .replace(/[^a-zA-Z0-9_-]/g, "_");
-    const uniqueName = `${Date.now()}-${base}${ext || ".jpg"}`;
-    cb(null, uniqueName);
-  },
-});
+const { saveImageAsset } = require("../database");
 
 const allowedMimeTypes = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
 
@@ -61,7 +14,7 @@ const hasAllowedImageType = (file = {}) => {
 };
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!hasAllowedImageType(file)) {
@@ -90,23 +43,15 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
         return res.status(400).json({ message: "Decoded image is empty" });
       }
 
-      const ext = mimeType.includes("png") ? ".png" : mimeType.includes("webp") ? ".webp" : ".jpg";
-      const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-      const savedPath = path.join(uploadDir, filename);
-      fs.writeFileSync(savedPath, buffer);
-
-      const p = normalizeUploadPath(savedPath);
-      return res.json({ path: p, filename });
+      const saved = await saveImageAsset(buffer, mimeType);
+      return res.json({ path: saved.path, filename: saved.filename });
     }
 
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-    const p = normalizeUploadPath(req.file.path || `/${uploadDir}/${req.file.filename}`);
-    if (!p || !p.includes('/uploads/')) {
-      return res.status(400).json({ message: "Invalid upload path" });
-    }
-    res.json({ path: p });
+    const saved = await saveImageAsset(req.file.buffer, req.file.mimetype);
+    res.json({ path: saved.path, filename: saved.filename });
   } catch (err) {
-    console.error(err);
+    console.error("Image upload failed:", err.name || "UnknownError");
     res.status(500).json({ message: "Upload failed" });
   }
 });

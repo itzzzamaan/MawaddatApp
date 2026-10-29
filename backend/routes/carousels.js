@@ -2,47 +2,12 @@ const express = require("express");
 const router = express.Router();
 const CarouselSlide = require("../models/CarouselSlide");
 const auth = require("../middleware/auth");
+const { saveImageAsset } = require("../database");
 const multer = require("multer");
-const fs = require("fs");
 const path = require("path");
 
-const normalizeStoredImagePath = (value) => {
-  if (!value || typeof value !== "string") return "";
-  const normalized = value.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
-  if (!normalized || /^https?:\/\//i.test(normalized)) return normalized;
-  const cleaned = normalized
-    .replace(/^\/+/, "")
-    .replace(/^.*?(?:uploads\/)?/, "");
-  return `/${(process.env.UPLOAD_DIR || "uploads").replace(/\\/g, "/").replace(/^\//, "")}/${cleaned}`;
-};
-
-// const upload = multer({ dest: process.env.UPLOAD_DIR || 'uploads/' });
-
-const UPLOAD_DIR = path.resolve(
-  __dirname,
-  "..",
-  process.env.UPLOAD_DIR || "uploads",
-);
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOAD_DIR);
-  },
-
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname || "").toLowerCase();
-    const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-
-    cb(null, filename);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024,
   },
@@ -140,10 +105,6 @@ router.get("/", async (req, res) => {
 
 router.post("/", auth, upload.single("image"), async (req, res) => {
   try {
-    console.log("Upload directory:", UPLOAD_DIR);
-    console.log("Request body:", req.body);
-    console.log("Uploaded file:", req.file);
-
     const body = normalizeCarouselBody(req.body || {});
 
     if (req.file) {
@@ -153,8 +114,8 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
           message: "Uploaded file is empty",
         });
       }
-      // Store only the relative URL in MongoDB.
-      body.image = `/uploads/${req.file.filename}`;
+      const saved = await saveImageAsset(req.file.buffer, req.file.mimetype);
+      body.image = saved.path;
     } else if (typeof body.image === "string" && body.image.trim()) {
       // Admin app uploads via /api/uploads first and sends the resulting path.
       const filename = getSafeImageFilename(body.image);
@@ -201,9 +162,10 @@ router.get("/:id", async (req, res) => {
 router.put("/:id", auth, upload.single("image"), async (req, res) => {
   try {
     const body = normalizeCarouselBody(req.body || {});
-    if (req.file)
-      body.image =
-        "/" + (process.env.UPLOAD_DIR || "uploads") + "/" + req.file.filename;
+    if (req.file?.buffer) {
+      const saved = await saveImageAsset(req.file.buffer, req.file.mimetype);
+      body.image = saved.path;
+    }
     const item = await CarouselSlide.findByIdAndUpdate(req.params.id, body, {
       new: true,
     });

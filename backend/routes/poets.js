@@ -2,9 +2,9 @@ const express = require("express");
 const router = express.Router();
 const Poet = require("../models/Poet");
 const auth = require("../middleware/auth");
+const { saveImageAsset } = require("../database");
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 
 const normalizeStoredImagePath = (value) => {
   if (!value || typeof value !== "string") return "";
@@ -18,31 +18,8 @@ const normalizeStoredImagePath = (value) => {
 
 // const upload = multer({ dest: process.env.UPLOAD_DIR || 'uploads/' });
 
-const UPLOAD_DIR = path.resolve(
-  __dirname,
-  "..",
-  process.env.UPLOAD_DIR || "uploads",
-);
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOAD_DIR);
-  },
-
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname || "").toLowerCase();
-    const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-
-    cb(null, filename);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024,
   },
@@ -148,11 +125,10 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
   try {
     const body = normalizePoetBody(req.body || {});
 
-    if (req.file) {
-      const filePath = `/uploads/${req.file.filename}`;
-
-      body.avatar = filePath;
-      body.image = filePath;
+    if (req.file?.buffer) {
+      const saved = await saveImageAsset(req.file.buffer, req.file.mimetype);
+      body.avatar = saved.path;
+      body.image = saved.path;
     }
 
     const item = new Poet(body);
@@ -178,11 +154,10 @@ router.put("/:id", auth, upload.single("image"), async (req, res) => {
   try {
     const body = normalizePoetBody(req.body || {});
 
-    if (req.file) {
-      const filePath = `/uploads/${req.file.filename}`;
-
-      body.avatar = filePath;
-      body.image = filePath;
+    if (req.file?.buffer) {
+      const saved = await saveImageAsset(req.file.buffer, req.file.mimetype);
+      body.avatar = saved.path;
+      body.image = saved.path;
     }
 
     const item = await Poet.findByIdAndUpdate(req.params.id, body, {

@@ -32,4 +32,8 @@ API endpoints:
 - GET/PUT/DELETE /api/events/:id
 - Similar endpoints for /api/poets, /api/homefeeds, /api/carousels
 
-Uploads are saved to `uploads/` and served at `/uploads/`.
+Uploaded images are stored in MongoDB and served at `/uploads/`; existing files
+in `uploads/` are still served as static assets.
+
+For Vercel deployments, see [DEPLOY.md](./DEPLOY.md) for the required backend
+environment variables and health check.

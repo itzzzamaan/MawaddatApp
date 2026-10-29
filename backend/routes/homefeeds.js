@@ -2,10 +2,10 @@ const express = require("express");
 const router = express.Router();
 const HomeFeed = require("../models/HomeFeed");
 const { notifyPoetFollowersAboutPost } = require("../notificationService");
+const { saveImageAsset } = require("../database");
 const auth = require("../middleware/auth");
 const adminOnly = require("../middleware/adminOnly");
 const multer = require("multer");
-const fs = require("fs");
 const path = require("path");
 
 const normalizeStoredImagePath = (value) => {
@@ -19,29 +19,6 @@ const normalizeStoredImagePath = (value) => {
 };
 
 // const upload = multer({ dest: process.env.UPLOAD_DIR || 'uploads/' });
-
-const UPLOAD_DIR = path.resolve(
-  __dirname,
-  "..",
-  process.env.UPLOAD_DIR || "uploads",
-);
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOAD_DIR);
-  },
-
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname || "").toLowerCase();
-    const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-
-    cb(null, filename);
-  },
-});
 
 const allowedMimeTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
@@ -58,7 +35,7 @@ const hasAllowedImageType = (file) => {
 };
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024,
   },
@@ -190,7 +167,7 @@ router.post(
   async (req, res) => {
     try {
       let body = normalizeHomeFeedBody(req.body || {});
-      body = applyStoredImageFields(body, req.files || {});
+      body = await applyStoredImageFields(body, req.files || {});
 
       if (!body.image && !body.avatar) {
         return res.status(400).json({ message: "Image is required" });
@@ -233,7 +210,7 @@ router.put(
   async (req, res) => {
     try {
       let body = normalizeHomeFeedBody(req.body || {});
-      body = applyStoredImageFields(body, req.files || {});
+      body = await applyStoredImageFields(body, req.files || {});
 
       if (!body.image && !body.avatar) {
         return res.status(400).json({ message: "Image is required" });
@@ -314,13 +291,13 @@ const getImagePathFromBody = (body = {}) => {
   return "";
 };
 
-const applyStoredImageFields = (body = {}, files = {}) => {
+const applyStoredImageFields = async (body = {}, files = {}) => {
   const directImage = getImagePathFromBody(body);
   const file =
     (files.image && files.image[0]) || (files.avatar && files.avatar[0]);
 
-  if (file) {
-    const saved = `/uploads/${file.filename}`;
+  if (file?.buffer) {
+    const saved = (await saveImageAsset(file.buffer, file.mimetype)).path;
     body.image = saved;
     body.avatar = saved;
     return body;
