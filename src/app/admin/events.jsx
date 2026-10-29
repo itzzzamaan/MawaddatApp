@@ -1,32 +1,15 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Image, ScrollView, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "@/utils/secureStorage";
 import { AdminContext } from './_layout';
 import { Colors } from '../../constants/theme';
 import Constants from 'expo-constants';
-import { normalizeImageUrl, uploadImageToApi } from '../../utils/api';
+import { getApiBase, normalizeImageUrl, uploadImageToApi } from '../../utils/api';
 
 const getAdminToken = async (currentToken) => {
   if (currentToken) return currentToken;
   return await SecureStore.getItemAsync('admin_token');
-};
-
-const getApiBase = () => {
-  const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
-  if (envHost) {
-    const normalized = envHost.replace(/\/$/, '');
-    return /^https?:\/\//i.test(normalized) ? normalized : `http://${normalized}`;
-  }
-
-  const expoHost = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
-  if (expoHost) {
-    const host = expoHost.split(':')[0];
-    return `http://${host}:4000`;
-  }
-  if (Platform.OS === 'android') return 'http://10.0.2.2:4000';
-  if (typeof window !== 'undefined' && window.location) return `http://${window.location.hostname}:4000`;
-  return 'http://localhost:4000';
 };
 
 const API = `${getApiBase()}/api`;
@@ -44,6 +27,8 @@ const emptyEvent = {
   date: '',
   time: '',
   venue: '',
+  completeAddress: '',
+  mapsLink: '',
   host: '',
   description: '',
   highlights: '',
@@ -70,11 +55,11 @@ export default function AdminEvents() {
 
   useEffect(() => { fetchList(); }, []);
 
-  const fetchList = async () => {
+  async function fetchList() {
     const res = await fetch(API + '/events');
     const json = await res.json();
     setItems(json || []);
-  };
+  }
 
   const resetForm = () => {
     setForm(emptyEvent);
@@ -124,6 +109,8 @@ export default function AdminEvents() {
       payload.append('date', form.date || '');
       payload.append('time', form.time || '');
       payload.append('venue', form.venue || '');
+      payload.append('completeAddress', form.completeAddress || '');
+      payload.append('mapsLink', form.mapsLink || '');
       payload.append('host', form.host || '');
       payload.append('description', form.description || '');
       payload.append('highlights', form.highlights || '');
@@ -162,6 +149,8 @@ export default function AdminEvents() {
       date: item.date || '',
       time: item.time || '',
       venue: item.venue || '',
+      completeAddress: item.completeAddress || '',
+      mapsLink: item.mapsLink || '',
       host: item.host || '',
       description: item.description || '',
       highlights: Array.isArray(item.highlights) ? item.highlights.join('\n') : '',
@@ -190,6 +179,8 @@ export default function AdminEvents() {
       payload.append('date', form.date || '');
       payload.append('time', form.time || '');
       payload.append('venue', form.venue || '');
+      payload.append('completeAddress', form.completeAddress || '');
+      payload.append('mapsLink', form.mapsLink || '');
       payload.append('host', form.host || '');
       payload.append('description', form.description || '');
       payload.append('highlights', form.highlights || '');
@@ -242,7 +233,9 @@ export default function AdminEvents() {
           <TextInput style={styles.input} placeholder="Category" value={form.category} onChangeText={(v) => updateField('category', v)} placeholderTextColor={Colors.light.textSecondary} />
           <TextInput style={styles.input} placeholder="Date" value={form.date} onChangeText={(v) => updateField('date', v)} placeholderTextColor={Colors.light.textSecondary} />
           <TextInput style={styles.input} placeholder="Time" value={form.time} onChangeText={(v) => updateField('time', v)} placeholderTextColor={Colors.light.textSecondary} />
-          <TextInput style={styles.input} placeholder="Venue" value={form.venue} onChangeText={(v) => updateField('venue', v)} placeholderTextColor={Colors.light.textSecondary} />
+          <TextInput style={styles.input} placeholder="Venue / city (include city, e.g. Hall, Karachi)" value={form.venue} onChangeText={(v) => updateField('venue', v)} placeholderTextColor={Colors.light.textSecondary} />
+          <TextInput style={styles.input} placeholder="Complete address" value={form.completeAddress} onChangeText={(v) => updateField('completeAddress', v)} placeholderTextColor={Colors.light.textSecondary} />
+          <TextInput style={styles.input} placeholder="Google Maps link (https://...)" value={form.mapsLink} onChangeText={(v) => updateField('mapsLink', v)} placeholderTextColor={Colors.light.textSecondary} autoCapitalize="none" keyboardType="url" />
           <TextInput style={styles.input} placeholder="Host" value={form.host} onChangeText={(v) => updateField('host', v)} placeholderTextColor={Colors.light.textSecondary} />
           <TextInput style={[styles.input, styles.textarea]} placeholder="Description" value={form.description} onChangeText={(v) => updateField('description', v)} placeholderTextColor={Colors.light.textSecondary} multiline />
           <TextInput style={[styles.input, styles.textarea]} placeholder="Highlights" value={form.highlights} onChangeText={(v) => updateField('highlights', v)} placeholderTextColor={Colors.light.textSecondary} multiline />

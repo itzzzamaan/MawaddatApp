@@ -1,6 +1,6 @@
 import React, { useContext, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "@/utils/secureStorage";
 import { Colors } from '../../constants/theme';
 import { useRouter } from 'expo-router';
 import { AdminContext } from './_layout';

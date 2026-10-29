@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Image, ScrollView, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "@/utils/secureStorage";
 import { AdminContext } from './_layout';
 import { Colors } from '../../constants/theme';
 import { getApiBase, normalizeImageUrl, uploadImageToApi } from '../../utils/api';

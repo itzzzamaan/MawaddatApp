@@ -14,7 +14,7 @@ import {
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "@/utils/secureStorage";
 import { getApiBase } from "../utils/api";
 
 const SignIn = () => {
@@ -36,7 +36,7 @@ const SignIn = () => {
       if (userToken) router.replace("/(tabs)/Home");
     };
     check();
-  }, []);
+  }, [router]);
 
   const handleContinue = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -86,7 +86,7 @@ const SignIn = () => {
         try {
           const parsedAdminError = JSON.parse(adminMessage);
           adminError = parsedAdminError.message || adminError;
-        } catch (error) {
+        } catch (_error) {
           adminError = adminMessage || adminError;
         }
 
@@ -155,6 +155,14 @@ const SignIn = () => {
                 onChangeText={setPassword}
               />
             </View>
+
+            <TouchableOpacity
+              style={styles.forgotPasswordButton}
+              onPress={() => router.push("/Forgot-password")}
+              accessibilityRole="button"
+            >
+              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+            </TouchableOpacity>
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </ScrollView>
@@ -232,6 +240,15 @@ const styles = StyleSheet.create({
     fontSize: wp("3.6%"),
     paddingVertical: hp("1.4%"),
     color: Colors.light.text,
+  },
+  forgotPasswordButton: {
+    alignSelf: "flex-end",
+    paddingVertical: 10,
+  },
+  forgotPasswordText: {
+    color: Colors.light.text,
+    fontSize: wp("3.4%"),
+    fontWeight: "600",
   },
   error: {
     color: "#D32F2F",

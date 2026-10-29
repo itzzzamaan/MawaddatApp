@@ -2,6 +2,12 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 export const getApiBase = () => {
+  // Dev web: the backend runs on the page's own host; a LAN IP baked into
+  // EXPO_PUBLIC_API_URL is usually unreachable from the browser.
+  if (Platform.OS === "web" && __DEV__ && typeof window !== "undefined") {
+    return `http://${window.location.hostname}:4000`;
+  }
+
   const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
   if (envHost) {
     const normalized = envHost.replace(/\/$/, "");
@@ -34,12 +40,12 @@ export const normalizeImageUrl = (value) => {
 
   const cleaned = trimmed.replace(/\\/g, "/").replace(/\/+/g, "/");
 
-  if (/^https?:\/\//i.test(cleaned)) {
-    const match = cleaned.match(
+  if (/^https?:\/\//i.test(trimmed)) {
+    const match = trimmed.replace(/\\/g, "/").match(
       /(?:^https?:\/\/[^/]+)?\/uploads\/([^/?#]+\.(?:jpe?g|png|webp))$/i
     );
     if (match) return `${getApiBase()}/uploads/${match[1]}`;
-    return cleaned;
+    return trimmed;
   }
 
   const match =
@@ -52,23 +58,6 @@ export const normalizeImageUrl = (value) => {
 
   const normalizedPath = cleaned.startsWith("/") ? cleaned : `/${cleaned}`;
   return `${getApiBase()}${normalizedPath}`;
-};
-
-const toBase64FromBytes = (bytes) => {
-  let binary = "";
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-
-  if (typeof btoa === "function") {
-    return btoa(binary);
-  }
-
-  if (typeof globalThis.Buffer !== "undefined") {
-    return globalThis.Buffer.from(binary, "binary").toString("base64");
-  }
-
-  throw new Error("Base64 encoding is not supported in this environment");
 };
 
 export const getMimeTypeFromName = (name = "") => {
@@ -87,19 +76,26 @@ export const uploadImageToApi = async ({
   if (!uri) return null;
   if (typeof uri === "string" && uri.startsWith("http")) return uri;
 
-  const fileName =
-    (String(uri).split("/").pop() || fallbackName).split("?")[0] ||
-    fallbackName;
-  const mimeType = getMimeTypeFromName(fileName);
+  const isDataOrBlobUri = /^(data|blob):/i.test(String(uri));
+  let fileName = isDataOrBlobUri
+    ? fallbackName
+    : (String(uri).split("/").pop() || fallbackName).split("?")[0] ||
+      fallbackName;
+  let mimeType = getMimeTypeFromName(fileName);
 
-  const response = await fetch(uri);
-  const arrayBuffer = await response.arrayBuffer();
-  const uint8 = new Uint8Array(arrayBuffer);
-  const base64 = toBase64FromBytes(uint8);
-
+  // Send the image as a real file part (multer `image` field), not a text field.
   const formData = new FormData();
-  formData.append("imageBase64", `data:${mimeType};base64,${base64}`);
-  formData.append("imageMimeType", mimeType);
+  if (Platform.OS === "web") {
+    const blob = await (await fetch(uri)).blob();
+    if (/^image\/(jpeg|png|webp)$/i.test(blob.type)) {
+      mimeType = blob.type.toLowerCase();
+      const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1];
+      fileName = `${fileName.replace(/\.[^.]+$/, "")}.${ext}`;
+    }
+    formData.append("image", blob, fileName);
+  } else {
+    formData.append("image", { uri, name: fileName, type: mimeType });
+  }
 
   const uploadResponse = await fetch(`${apiBase}/api/uploads`, {
     method: "POST",

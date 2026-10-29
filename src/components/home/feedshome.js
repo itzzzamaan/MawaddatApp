@@ -8,7 +8,6 @@ import {
   ImageBackground,
   Linking,
   Modal,
-  Platform,
   Share,
   StatusBar,
   StyleSheet,
@@ -17,14 +16,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "@/utils/secureStorage";
 import { useSavedPosts } from "../../contexts/SavedPostsContext";
 import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
-import Constants from "expo-constants";
-import { normalizeImageUrl } from "../../utils/api";
+import { getApiBase, normalizeImageUrl } from "../../utils/api";
 
 const PINK = "#2C1810";
 const BACKGROUND = "#F8F6F2";
@@ -32,23 +30,6 @@ const CARD = "#FFFDF9";
 const MUTED = "#5B493D";
 const TEXT = "#2C1810";
 const PANEL = "#F0EAE3";
-
-const getApiBase = () => {
-  const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
-  if (envHost) {
-    const normalized = envHost.replace(/\/$/, "");
-    return /^https?:\/\//i.test(normalized) ? normalized : `http://${normalized}`;
-  }
-
-  const expoHost = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
-  if (expoHost) {
-    const host = expoHost.split(":")[0];
-    return `http://${host}:4000`;
-  }
-
-  if (Platform.OS === "android") return "http://10.0.2.2:4000";
-  return "http://localhost:4000";
-};
 
 const resolveImageUrl = (value) => {
   if (!value) return null;

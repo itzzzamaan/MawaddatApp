@@ -1,7 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const Event = require("../models/Event");
+const { notifyAllUsersAboutEvent } = require("../notificationService");
 const auth = require("../middleware/auth");
+const adminOnly = require("../middleware/adminOnly");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
@@ -154,7 +156,7 @@ router.get("/", async (req, res) => {
 });
 
 // Create
-router.post("/", auth, upload.single("image"), async (req, res) => {
+router.post("/", auth, adminOnly, upload.single("image"), async (req, res) => {
   try {
     const body = normalizeEventBody(req.body || {});
     applyStoredImageFields(body, req.file);
@@ -176,6 +178,7 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
 
     const item = new Event(body);
     await item.save();
+    await notifyAllUsersAboutEvent(item);
 
     return res.status(201).json({
       success: true,

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import Constants from "expo-constants";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "@/utils/secureStorage";
 import {
   Dimensions,
   KeyboardAvoidingView,
@@ -31,6 +31,12 @@ const scale = (size) => {
 };
 
 const getApiBase = () => {
+  // Dev web: the backend runs on the page's own host; a LAN IP baked into
+  // EXPO_PUBLIC_API_URL is usually unreachable from the browser.
+  if (Platform.OS === "web" && __DEV__ && typeof window !== "undefined") {
+    return `http://${window.location.hostname}:4000`;
+  }
+
   const envHost = process.env.EXPO_PUBLIC_API_URL;
   if (envHost) return envHost.replace(/\/$/, "");
 

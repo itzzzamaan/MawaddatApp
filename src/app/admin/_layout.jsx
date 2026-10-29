@@ -3,7 +3,7 @@ import { Slot, usePathname, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors } from '../../constants/theme';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "@/utils/secureStorage";
 
 export const AdminContext = createContext(null);
 

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "@/utils/secureStorage";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -24,6 +24,9 @@ import { Colors } from "../constants/theme";
 import gradientOverlay from "../app/assets/images/gradientOverlay.png";
 
 const { width } = Dimensions.get("window");
+
+import { normalizeImageUrl } from "../utils/api";
+
 
 const getApiBase = () => {
   const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
@@ -105,7 +108,7 @@ export default function SplashCarousel() {
     const visibleSocials = Object.entries(socialLinks).filter(
       ([, value]) => typeof value === "string" && value.trim().length > 0
     );
-    const imageSource = item.image ? { uri: `${getApiBase()}${item.image}` } : null;
+    const imageSource = item.image ? { uri: normalizeImageUrl(item.image) } : null;
 
     return (
       <ImageBackground

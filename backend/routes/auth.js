@@ -5,10 +5,13 @@ const User = require('../models/User');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
 const pendingOtps = new Map();
+const pendingPasswordResets = new Map();
+const passwordResetTokens = new Map();
 
-const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
+const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
 
 const getTransporter = () => {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
@@ -33,7 +36,7 @@ const getTransporter = () => {
   });
 };
 
-const sendOtpEmail = async (email, otp) => {
+const sendOtpEmail = async (email, otp, purpose = 'signup') => {
   const transporter = getTransporter();
 
   if (!transporter) {
@@ -41,14 +44,15 @@ const sendOtpEmail = async (email, otp) => {
     return { devMode: true, message: 'SMTP not configured; OTP was logged to the server console.' };
   }
 
+  const isPasswordReset = purpose === 'password-reset';
   const mailOptions = {
     from: process.env.SMTP_FROM || process.env.SMTP_USER || 'isak36228@gmail.com',
     to: email,
-    subject: 'Your Mawaddat signup OTP',
+    subject: isPasswordReset ? 'Reset your Mawaddat password' : 'Your Mawaddat signup OTP',
     html: `
       <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-        <h2 style="margin-bottom: 12px;">Your verification code</h2>
-        <p>Use the code below to complete your signup.</p>
+        <h2 style="margin-bottom: 12px;">${isPasswordReset ? 'Password reset code' : 'Your verification code'}</h2>
+        <p>${isPasswordReset ? 'Use this code to reset your Mawaddat password.' : 'Use the code below to complete your signup.'}</p>
         <div style="font-size: 32px; letter-spacing: 6px; font-weight: 700; margin: 18px 0; padding: 16px 20px; background: #f3f4f6; border-radius: 10px; display: inline-block;">
           ${otp}
         </div>
@@ -60,6 +64,100 @@ const sendOtpEmail = async (email, otp) => {
   await transporter.sendMail(mailOptions);
   return { devMode: false, message: 'OTP email sent successfully.' };
 };
+
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
+router.post('/forgot-password/send-otp', async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    if (!email) return res.status(400).json({ message: 'Email is required.' });
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(200).json({
+        message: 'If an account exists for that email, a verification code has been sent.',
+      });
+    }
+
+    const otp = generateOtp();
+    const emailResult = await sendOtpEmail(email, otp, 'password-reset');
+    pendingPasswordResets.set(email, {
+      otpHash: crypto.createHash('sha256').update(otp).digest('hex'),
+      createdAt: Date.now(),
+      attempts: 0,
+    });
+
+    return res.status(200).json({
+      message: 'If an account exists for that email, a verification code has been sent.',
+      devMode: emailResult.devMode,
+      otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
+    });
+  } catch (err) {
+    console.error('Send password reset OTP error:', err);
+    return res.status(500).json({ message: 'Unable to send a verification code right now.' });
+  }
+});
+
+router.post('/forgot-password/verify-otp', async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const otp = String(req.body?.otp || '').trim();
+  if (!email || !otp) {
+    return res.status(400).json({ message: 'Email and verification code are required.' });
+  }
+
+  const pending = pendingPasswordResets.get(email);
+  if (!pending || Date.now() - pending.createdAt > 10 * 60 * 1000) {
+    pendingPasswordResets.delete(email);
+    return res.status(400).json({ message: 'The code is invalid or expired. Request a new code.' });
+  }
+
+  if (pending.attempts >= 5) {
+    pendingPasswordResets.delete(email);
+    return res.status(429).json({ message: 'Too many attempts. Request a new code.' });
+  }
+
+  pending.attempts += 1;
+  const submittedHash = crypto.createHash('sha256').update(otp).digest();
+  const expectedHash = Buffer.from(pending.otpHash, 'hex');
+  if (!crypto.timingSafeEqual(submittedHash, expectedHash)) {
+    return res.status(400).json({ message: 'The code is invalid or expired. Request a new code.' });
+  }
+
+  pendingPasswordResets.delete(email);
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  passwordResetTokens.set(resetToken, { email, createdAt: Date.now() });
+  return res.status(200).json({ message: 'Code verified.', resetToken });
+});
+
+router.post('/forgot-password/reset', async (req, res) => {
+  try {
+    const resetToken = String(req.body?.resetToken || '');
+    const password = String(req.body?.password || '');
+    if (!resetToken || password.length < 8) {
+      return res.status(400).json({ message: 'A verified reset session and password of at least 8 characters are required.' });
+    }
+
+    const reset = passwordResetTokens.get(resetToken);
+    if (!reset || Date.now() - reset.createdAt > 10 * 60 * 1000) {
+      passwordResetTokens.delete(resetToken);
+      return res.status(400).json({ message: 'Your reset session expired. Request a new code.' });
+    }
+
+    const user = await User.findOne({ email: reset.email });
+    if (!user) {
+      passwordResetTokens.delete(resetToken);
+      return res.status(400).json({ message: 'Unable to reset this account. Request a new code.' });
+    }
+
+    user.password = await bcrypt.hash(password, 10);
+    await user.save();
+    passwordResetTokens.delete(resetToken);
+    return res.status(200).json({ message: 'Password updated successfully.' });
+  } catch (err) {
+    console.error('Password reset error:', err);
+    return res.status(500).json({ message: 'Unable to update your password right now.' });
+  }
+});
 
 const getPendingSignup = (email) => {
   if (!email) return null;

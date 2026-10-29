@@ -1,3 +1,4 @@
+
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -8,24 +9,27 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { widthPercentageToDP as wp } from "react-native-responsive-screen";
 import Navbar from "../../components/Navbar";
 import { Colors } from "../../constants/theme";
+import { useCurrentLocation } from "../../contexts/LocationContext";
 import { useSavedPosts } from "../../contexts/SavedPostsContext";
-import { getApiBase } from "../../utils/api";
+import { getApiBase, normalizeImageUrl } from "../../utils/api";
 
 const ACCENT = "#C49A32";
-const TEXT_PRIMARY = Colors.light.text;
-const TEXT_MUTED = Colors.light.textSecondary;
-const PAGE_BG = Colors.light.background;
-const CARD_BG = Colors.light.backgroundElement;
-const PANEL = Colors.light.backgroundSelected;
-const BROWN = Colors.light.textSecondary;
+const BROWN = "#2C1810";
+const CREAM = "#F7F2EC";
+const TEXT_PRIMARY = BROWN;
+const TEXT_MUTED = "#817165";
+const PAGE_BG = CREAM;
+const CARD_BG = "#FFFCF8";
+const PANEL = "#EFE5D8";
+const BORDER = "#E8DCCF";
 
 const CATEGORIES = [
   "All",
@@ -38,35 +42,47 @@ const CATEGORIES = [
 ];
 
 const SHADOW = {
-  shadowColor: "#000",
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.06,
-  shadowRadius: 8,
-  elevation: 2,
+  shadowColor: "#2C1810",
+  shadowOffset: { width: 0, height: 5 },
+  shadowOpacity: 0.09,
+  shadowRadius: 12,
+  elevation: 4,
 };
 
 function EventCard({ item, favorite, onFavorite, onPress }) {
   return (
     <Pressable
-      style={({ pressed }) => [styles.eventCard, pressed && styles.cardPressed]}
+      style={({ pressed }) => [
+        styles.eventCard,
+        pressed && styles.cardPressed,
+      ]}
       onPress={onPress}
     >
       <View style={styles.imageContainer}>
         <Image
           source={{
             uri: item.image
-              ? `${getApiBase()}${item.image}`
+              ? normalizeImageUrl(item.image)
               : "https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=1200",
           }}
           style={styles.eventImage}
+          resizeMode="cover"
         />
 
+        <View style={styles.imageOverlay} />
+
         <View style={styles.categoryBadge}>
-          <Text style={styles.categoryBadgeText}>{item.category || "Event"}</Text>
+          <Ionicons name="sparkles-outline" size={12} color="#F7D995" />
+          <Text style={styles.categoryBadgeText}>
+            {item.category || "Event"}
+          </Text>
         </View>
 
         <Pressable
-          style={styles.favoriteButton}
+          style={({ pressed }) => [
+            styles.favoriteButton,
+            pressed && styles.favoritePressed,
+          ]}
           hitSlop={8}
           onPress={(event) => {
             event.stopPropagation();
@@ -74,48 +90,97 @@ function EventCard({ item, favorite, onFavorite, onPress }) {
           }}
           accessibilityRole="button"
           accessibilityLabel={
-            favorite ? "Remove event from favorites" : "Add event to favorites"
+            favorite
+              ? "Remove event from favorites"
+              : "Add event to favorites"
           }
         >
           <Ionicons
             name={favorite ? "heart" : "heart-outline"}
             size={21}
-            color={favorite ? "#E54868" : TEXT_PRIMARY}
+            color={favorite ? "#D94C60" : BROWN}
           />
         </Pressable>
+
+        <View style={styles.imageCaption}>
+          <Text style={styles.imageCaptionEyebrow}>
+            WORDS • EMOTIONS • CONNECTIONS
+          </Text>
+          <Text style={styles.imageCaptionTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
+        </View>
       </View>
 
-      <View style={styles.cardContent}>
-        <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.eventSubtitle} numberOfLines={2}>
-          {item.subtitle || item.description}
-        </Text>
+      <View style={styles.cardContent}>      
 
-        <View style={styles.infoRow}>
-          <Ionicons name="calendar-outline" size={16} color={ACCENT} />
-          <Text style={styles.infoText}>{item.date || "TBA"}</Text>
+        {/* Date and time stay on the same line */}
+        <View style={styles.dateTimeRow}>
+          <View style={styles.dateTimeItem}>
+            <View style={styles.infoIconBox}>
+              <Ionicons
+                name="calendar-outline"
+                size={16}
+                color={ACCENT}
+              />
+            </View>
+            <View style={styles.dateTimeTextContainer}>
+              <Text style={styles.infoLabel}>DATE</Text>
+              <Text style={styles.infoText} numberOfLines={1}>
+                {item.date || "TBA"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.dateTimeDivider} />
+
+          <View style={styles.dateTimeItem}>
+            <View style={styles.infoIconBox}>
+              <Ionicons name="time-outline" size={16} color={ACCENT} />
+            </View>
+            <View style={styles.dateTimeTextContainer}>
+              <Text style={styles.infoLabel}>TIME</Text>
+              <Text style={styles.infoText} numberOfLines={1}>
+                {item.time || "TBA"}
+              </Text>
+            </View>
+          </View>
         </View>
 
-        <View style={styles.infoRow}>
-          <Ionicons name="time-outline" size={16} color={ACCENT} />
-          <Text style={styles.infoText}>{item.time || "TBA"}</Text>
+        <View style={styles.venueRow}>
+          <View style={styles.venueIcon}>
+            <Ionicons name="location-outline" size={17} color={BROWN} />
+          </View>
+
+          <View style={styles.venueTextContainer}>
+            <Text style={styles.infoLabel}>VENUE</Text>
+            <Text style={styles.venueText} numberOfLines={2}>
+              {item.venue || "Venue TBD"}
+            </Text>
+          </View>
+
+          <Ionicons name="chevron-forward" size={17} color="#B4A393" />
         </View>
 
-        <View style={styles.infoRow}>
-          <Ionicons name="location-outline" size={16} color={ACCENT} />
-          <Text style={styles.infoText} numberOfLines={1}>
-            {item.venue || "Venue TBD"}
-          </Text>
-        </View>
+        <View style={styles.cardDivider} />
 
         <View style={styles.cardFooter}>
-          <Text style={styles.hostText} numberOfLines={1}>
-            Hosted by {item.host || "Unknown"}
-          </Text>
+          <View style={styles.hostContainer}>
+            <View style={styles.hostIcon}>
+              <Ionicons name="person-outline" size={16} color={BROWN} />
+            </View>
+
+            <View style={styles.hostTextContainer}>
+              <Text style={styles.hostLabel}>PRESENTED BY</Text>
+              <Text style={styles.hostText} numberOfLines={1}>
+                {item.host || "Unknown"}
+              </Text>
+            </View>
+          </View>
 
           <View style={styles.viewButton}>
-            <Text style={styles.viewButtonText}>View program</Text>
-            <Ionicons name="arrow-forward" size={16} color="#fff" />
+            <Text style={styles.viewButtonText}>Explore</Text>
+            <Ionicons name="arrow-forward" size={16} color={CREAM} />
           </View>
         </View>
       </View>
@@ -125,45 +190,89 @@ function EventCard({ item, favorite, onFavorite, onPress }) {
 
 export default function ShayariEvents() {
   const router = useRouter();
+
   const [activeCategory, setActiveCategory] = useState("All");
   const [search, setSearch] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { savedPrograms, toggleSavedProgram, isProgramSaved } = useSavedPosts();
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [heroPressed, setHeroPressed] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+  
+
+  const { currentCity } = useCurrentLocation();
+  const { savedPrograms, toggleSavedProgram, isProgramSaved } =
+    useSavedPosts();
 
   useEffect(() => {
+    let active = true;
+
     const loadEvents = async () => {
+      setLoading(true);
+      setLoadError(false);
+
       try {
         const res = await fetch(`${getApiBase()}/api/events`);
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
         const json = await res.json();
-        setEvents(Array.isArray(json) ? json : []);
+
+        if (active) setEvents(Array.isArray(json) ? json : []);
       } catch (err) {
         console.log("Failed to load events", err);
-        setEvents([]);
+        if (active) {
+          setEvents([]);
+          setLoadError(true);
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     loadEvents();
-  }, []);
+
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
 
   const filteredEvents = useMemo(() => {
     const query = search.trim().toLowerCase();
+
     return events.filter((item) => {
+      // Without a detected city (web, permission denied) show every event.
+      const matchesCity =
+        !currentCity ||
+        (item.venue || "").toLowerCase().includes(currentCity.toLowerCase());
+
       const matchesCategory =
-        activeCategory === "All" ||
-        (item.category || "") === activeCategory;
+        activeCategory === "All" || (item.category || "") === activeCategory;
+
       const matchesSearch =
         !query ||
-        ((item.title || "").toLowerCase().includes(query) ||
-          (item.subtitle || "").toLowerCase().includes(query) ||
-          (item.venue || "").toLowerCase().includes(query));
-      const matchesFavorite = !favoritesOnly || isProgramSaved(item._id || item.id);
-      return matchesCategory && matchesSearch && matchesFavorite;
+        (item.title || "").toLowerCase().includes(query) ||
+        (item.subtitle || "").toLowerCase().includes(query) ||
+        (item.venue || "").toLowerCase().includes(query);
+
+      const matchesFavorite =
+        !favoritesOnly || isProgramSaved(item._id || item.id);
+
+      return (
+        matchesCity &&
+        matchesCategory &&
+        matchesSearch &&
+        matchesFavorite
+      );
     });
-  }, [activeCategory, events, favoritesOnly, isProgramSaved, search]);
+  }, [
+    activeCategory,
+    currentCity,
+    events,
+    favoritesOnly,
+    isProgramSaved,
+    search,
+  ]);
 
   const toggleFavorite = (id) => {
     const event = events.find((item) => (item._id || item.id) === id);
@@ -181,6 +290,7 @@ export default function ShayariEvents() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <Navbar />
+
       <View style={styles.page}>
         <FlatList
           data={filteredEvents}
@@ -189,63 +299,62 @@ export default function ShayariEvents() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
-            <>
-              <View style={styles.hero}>
-                <Text style={styles.heroTitle}>Explore Programs</Text>
-                <Text style={styles.heroDescription}>
-                  Discover soulful gatherings, poetry circles, and cultural experiences shaped by words and emotion.
-                </Text>
-              </View>
-
-              {/* <View style={styles.headerRow}>
-                <Text style={styles.pageTitle}>Poetry Programs</Text>
-
-                <View style={styles.toggleGroup}>
-                  <Pressable
-                    onPress={() => setFavoritesOnly(false)}
-                    style={[
-                      styles.toggleButton,
-                      !favoritesOnly && styles.toggleButtonActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.toggleButtonText,
-                        !favoritesOnly && styles.toggleButtonTextActive,
-                      ]}
-                    >
-                      All
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => setFavoritesOnly(true)}
-                    style={[
-                      styles.toggleButton,
-                      favoritesOnly && styles.toggleButtonActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.toggleButtonText,
-                        favoritesOnly && styles.toggleButtonTextActive,
-                      ]}
-                    >
-                      Saved
-                    </Text>
-                  </Pressable>
-                </View>
-              </View> */}
+            <View>
+              <TouchableOpacity
+                               activeOpacity={0.9}
+                               onPress={() => {
+                                 setActiveCategory("All");
+                                 setSearchQuery("");
+                               }}
+                               onPressIn={() => setHeroPressed(true)}
+                               onPressOut={() => setHeroPressed(false)}
+                               style={[styles.hero, heroPressed && styles.heroPressed]}
+                             >
+                               <Text style={styles.heroTitle}>Explore Programs</Text>
+                               <Text style={styles.heroDescription}>
+                                 Discover legendary voices and literary figures whose words
+                                 continue to inspire generations.
+                               </Text>
+                             </TouchableOpacity>
 
               <View style={styles.searchBox}>
-                <Ionicons name="search-outline" size={18} color="#7B6C61" />
+                <View style={styles.searchIconBox}>
+                  <Ionicons
+                    name="search-outline"
+                    size={20}
+                    color={BROWN}
+                  />
+                </View>
+
                 <TextInput
                   value={search}
                   onChangeText={setSearch}
                   placeholder="Search programs, venues, or hosts"
-                  placeholderTextColor="#9B8E82"
+                  placeholderTextColor="#A39385"
                   style={styles.searchInput}
+                  returnKeyType="search"
+                  accessibilityLabel="Search programs"
                 />
+
+                {search.length > 0 && (
+                  <Pressable
+                    onPress={() => setSearch("")}
+                    hitSlop={10}
+                    style={styles.clearSearchButton}
+                    accessibilityLabel="Clear search"
+                  >
+                    <Ionicons
+                      name="close-circle"
+                      size={19}
+                      color="#998879"
+                    />
+                  </Pressable>
+                )}
+              </View>
+
+              <View style={styles.categoryHeader}>
+                <Text style={styles.categoryHeading}>Browse by mood</Text>
+                <Text style={styles.categoryHint}>Choose your vibe</Text>
               </View>
 
               <ScrollView
@@ -253,32 +362,105 @@ export default function ShayariEvents() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.categoryRow}
               >
-                {CATEGORIES.map((category) => (
-                  <Pressable
-                    key={category}
-                    onPress={() => setActiveCategory(category)}
-                    style={[
-                      styles.categoryButton,
-                      activeCategory === category && styles.categoryButtonActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryText,
-                        activeCategory === category && styles.categoryTextActive,
+                {CATEGORIES.map((category) => {
+                  const selected = activeCategory === category;
+
+                  return (
+                    <Pressable
+                      key={category}
+                      onPress={() => setActiveCategory(category)}
+                      style={({ pressed }) => [
+                        styles.categoryButton,
+                        selected && styles.categoryButtonActive,
+                        pressed && styles.categoryPressed,
                       ]}
                     >
-                      {category}
-                    </Text>
-                  </Pressable>
-                ))}
+                      {selected && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={14}
+                          color={CREAM}
+                        />
+                      )}
+
+                      <Text
+                        style={[
+                          styles.categoryText,
+                          selected && styles.categoryTextActive,
+                        ]}
+                      >
+                        {category}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
-            </>
+
+              <View style={styles.resultsHeader}>
+                <View>
+                  <Text style={styles.resultsTitle}>
+                    {activeCategory === "All"
+                      ? "Upcoming Programs"
+                      : `${activeCategory} programs`}
+                  </Text>
+                  <Text style={styles.resultsSubtitle}>
+                    A little inspiration for your day
+                  </Text>
+                </View>
+
+                <Ionicons
+                  name="sparkles-outline"
+                  size={22}
+                  color={ACCENT}
+                />
+              </View>
+            </View>
           }
           ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>No events scheduled yet.</Text>
-            </View>
+            loading ? null : (
+              <View style={styles.emptyBox}>
+                <View style={styles.emptyIconCircle}>
+                  <Ionicons
+                    name={loadError ? "cloud-offline-outline" : "calendar-outline"}
+                    size={32}
+                    color={BROWN}
+                  />
+                </View>
+
+                <Text style={styles.emptyTitle}>
+                  {loadError ? "Couldn't load programs" : "No programs found"}
+                </Text>
+
+                <Text style={styles.emptyText}>
+                  {loadError
+                    ? "Please check your connection and try again."
+                    : currentCity
+                      ? `No programs scheduled in ${currentCity} match your selection. Try another category or search.`
+                      : "No programs match your selection. Try another category or search."}
+                </Text>
+
+                {loadError && (
+                  <Pressable
+                    style={styles.resetButton}
+                    onPress={() => setReloadKey((key) => key + 1)}
+                  >
+                    <Text style={styles.resetButtonText}>Try again</Text>
+                  </Pressable>
+                )}
+
+                {search.length > 0 && (
+                  <Pressable
+                    style={styles.resetButton}
+                    onPress={() => {
+                      setSearch("");
+                      setActiveCategory("All");
+                    }}
+                  >
+                    <Text style={styles.resetButtonText}>Clear filters</Text>
+                  </Pressable>
+                )}
+              </View>
+            )
           }
           renderItem={({ item }) => (
             <EventCard
@@ -287,12 +469,21 @@ export default function ShayariEvents() {
               onFavorite={toggleFavorite}
               onPress={() => handleOpen(item)}
             />
-          )
-          }
+          )}
           ListFooterComponent={
             loading ? (
               <View style={styles.loadingBox}>
-                <ActivityIndicator color={ACCENT} />
+                <ActivityIndicator size="large" color={ACCENT} />
+                <Text style={styles.loadingText}>
+                  Finding beautiful experiences...
+                </Text>
+              </View>
+            ) : filteredEvents.length > 0 ? (
+              <View style={styles.footerNote}>
+                <Ionicons name="heart" size={15} color={ACCENT} />
+                <Text style={styles.footerNoteText}>
+                  Made for moments worth remembering
+                </Text>
               </View>
             ) : null
           }
@@ -303,226 +494,528 @@ export default function ShayariEvents() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: PAGE_BG, marginTop: -31,},
-  page: {
+  safeArea: {
     flex: 1,
+    backgroundColor: PAGE_BG,
+    marginTop: -31,
+    
+  },
+
+  page: {
+    marginBottom: 94,
     backgroundColor: PAGE_BG,
     paddingHorizontal: 16,
     paddingTop: 8,
-    
   },
-  hero: {
-    backgroundColor: "#E8D8C0",
-    borderRadius: 22,
+
+  
+
+ hero: {
     paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginTop: 4,
-    marginBottom: 12,
+    paddingTop: 8,
+    paddingBottom: 12,
+    marginBottom: 10,
+    borderRadius: 18,
+    backgroundColor: "#F4EEE8",
     borderWidth: 1,
-    borderColor: "rgba(44,24,16,0.06)",
+    borderColor: "rgba(44, 24, 16, 0.08)",
     ...SHADOW,
   },
-  heroTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: TEXT_PRIMARY,
-    letterSpacing: 0.2,
+  heroPressed: {
+    transform: [{ scale: 0.985 }],
+    backgroundColor: "#EFE5DB",
   },
+  heroTitle: { fontSize: 24, fontWeight: "800", color: TEXT_PRIMARY, letterSpacing: 0.15 },
   heroDescription: {
-    marginTop: 6,
     color: TEXT_MUTED,
-    fontSize: 13,
-    lineHeight: 20,
+    marginTop: 6,
+    fontSize: 12.5,
+    lineHeight: 18,
   },
-  headerRow: {
+
+  sectionHeading: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    justifyContent: "space-between",
+    marginBottom: 15,
+    paddingHorizontal: 2,
   },
-  pageTitle: {
-    fontSize: 24,
+
+  sectionEyebrow: {
+    color: ACCENT,
+    fontSize: 9,
     fontWeight: "800",
-    color: TEXT_PRIMARY,
+    letterSpacing: 1.7,
+    marginBottom: 5,
   },
-  toggleGroup: {
-    flexDirection: "row",
-    backgroundColor: PANEL,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(44,24,16,0.04)",
+
+  sectionTitle: {
+    color: BROWN,
+    fontSize: 23,
+    fontWeight: "800",
+    letterSpacing: -0.4,
   },
-  toggleButton: {
-    flex: 1,
-    paddingVertical: 10,
+
+  countBadge: {
+    minWidth: 38,
+    height: 38,
+    paddingHorizontal: 8,
+    borderRadius: 13,
+    backgroundColor: BROWN,
     alignItems: "center",
     justifyContent: "center",
   },
-  toggleButtonActive: {
-    backgroundColor: ACCENT,
-  },
-  toggleButtonText: {
-    color: TEXT_PRIMARY,
-    fontWeight: "700",
+
+  countText: {
+    color: CREAM,
     fontSize: 14,
+    fontWeight: "800",
   },
-  toggleButtonTextActive: {
-    color: "#fff",
-  },
+
   searchBox: {
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
     backgroundColor: CARD_BG,
-    borderRadius: 16,
-    marginBottom: 12,
+    borderRadius: 17,
+    paddingHorizontal: 9,
+    marginBottom: 21,
     borderWidth: 1,
-    borderColor: "rgba(44,24,16,0.06)",
+    borderColor: BORDER,
     ...SHADOW,
   },
+
+  searchIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: PANEL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   searchInput: {
     flex: 1,
-    paddingVertical: 10,
-    paddingLeft: 8,
-    color: TEXT_PRIMARY,
-    fontSize: 14,
-  },
-  categoryRow: {
-    paddingBottom: 12,
-  },
-  categoryButton: {
-    backgroundColor: PANEL,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: "rgba(44,24,16,0.04)",
-  },
-  categoryButtonActive: {
-    backgroundColor: ACCENT,
-  },
-  categoryText: {
-    color: TEXT_PRIMARY,
+    color: BROWN,
+    
+    paddingHorizontal: 10,
     fontSize: 12,
-    fontWeight: "700",
   },
-  categoryTextActive: {
-    color: "#fff",
+
+  clearSearchButton: {
+    padding: 5,
   },
-  listContent: {
-    paddingBottom: 36,
-    paddingTop: 4,
+
+  categoryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 11,
+    paddingHorizontal: 2,
   },
-  eventCard: {
+
+  categoryHeading: {
+    color: BROWN,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  categoryHint: {
+    color: TEXT_MUTED,
+    fontSize: 10,
+    fontWeight: "500",
+  },
+
+  categoryRow: {
+    paddingBottom: 21,
+    paddingRight: 5,
+    gap: 8,
+  },
+
+  categoryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
     backgroundColor: CARD_BG,
-    borderRadius: 20,
-    overflow: "hidden",
-    marginBottom: 16,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 30,
     borderWidth: 1,
-    borderColor: "#F1E7DF",
-    ...SHADOW,
+    borderColor: BORDER,
   },
-  cardPressed: {
-    opacity: 0.96,
+
+  categoryButtonActive: {
+    backgroundColor: BROWN,
+    borderColor: BROWN,
   },
-  imageContainer: {
-    position: "relative",
+
+  categoryPressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.97 }],
   },
-  eventImage: {
-    width: "100%",
-    height: 180,
-    backgroundColor: "#ddd",
-  },
-  categoryBadge: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  categoryBadgeText: {
-    color: "#fff",
+
+  categoryText: {
+    color: BROWN,
     fontSize: 11,
     fontWeight: "700",
   },
+
+  categoryTextActive: {
+    color: CREAM,
+  },
+
+  resultsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 13,
+    paddingHorizontal: 2,
+  },
+
+  resultsTitle: {
+    color: BROWN,
+    fontSize: 17,
+    fontWeight: "800",
+  },
+
+  resultsSubtitle: {
+    color: TEXT_MUTED,
+    fontSize: 11,
+    marginTop: 4,
+  },
+
+  eventCard: {
+    backgroundColor: CARD_BG,
+    borderRadius: 22,
+    overflow: "hidden",
+    marginBottom: 19,
+    borderWidth: 1,
+    borderColor: BORDER,
+    ...SHADOW,
+  },
+
+  cardPressed: {
+    opacity: 0.96,
+    transform: [{ scale: 0.99 }],
+  },
+
+  imageContainer: {
+    position: "relative",
+    backgroundColor: PANEL,
+  },
+
+  eventImage: {
+    width: "100%",
+    height: 205,
+    backgroundColor: PANEL,
+  },
+
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(25,13,8,0.13)",
+  },
+
+  categoryBadge: {
+    position: "absolute",
+    top: 13,
+    left: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(44,24,16,0.88)",
+    borderRadius: 30,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+
+  categoryBadgeText: {
+    color: "#FFF8EE",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+
   favoriteButton: {
     position: "absolute",
     top: 12,
     right: 12,
-    backgroundColor: "rgba(255,255,255,0.75)",
-    borderRadius: 999,
-    width: 36,
-    height: 36,
+    backgroundColor: "#FFF9F0",
+    borderRadius: 15,
+    width: 42,
+    height: 42,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(44,24,16,0.08)",
+    elevation: 3,
   },
-  cardContent: {
-    padding: 14,
+
+  favoritePressed: {
+    transform: [{ scale: 0.9 }],
   },
-  eventTitle: {
-    fontSize: 18,
+
+  imageCaption: {
+    position: "absolute",
+    bottom: 15,
+    left: 15,
+    right: 15,
+  },
+
+  imageCaptionEyebrow: {
+    color: "#F1D49A",
+    fontSize: 9,
     fontWeight: "800",
-    color: TEXT_PRIMARY,
+    letterSpacing: 1.5,
+    marginBottom: 5,
   },
+
+  imageCaptionTitle: {
+    color: "#FFFFFF",
+    fontSize: 23,
+    lineHeight: 29,
+    fontWeight: "800",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 5,
+  },
+
+  cardContent: {
+    paddingHorizontal: 15,
+    paddingTop: 15,
+    paddingBottom: 14,
+  },
+
   eventSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: TEXT_MUTED,
-    marginTop: 6,
-    marginBottom: 10,
+    lineHeight: 19,
+    marginBottom: 15,
   },
-  infoRow: {
+
+  dateTimeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F7F0E6",
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    paddingVertical: 11,
+    marginBottom: 11,
+  },
+
+  dateTimeItem: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 8,
   },
+
+  infoIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: "#FFFCF7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  dateTimeTextContainer: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  infoLabel: {
+    color: "#9A8875",
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+
   infoText: {
-    color: TEXT_PRIMARY,
-    fontSize: 12,
+    color: BROWN,
+    fontSize: 11,
+    fontWeight: "700",
   },
-  cardFooter: {
+
+  dateTimeDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: "#DFD0BF",
+    marginHorizontal: 10,
+  },
+
+  venueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    gap: 10,
+  },
+
+  venueIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: PANEL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  venueTextContainer: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  venueText: {
+    color: BROWN,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+
+  cardDivider: {
+    height: 1,
+    backgroundColor: BORDER,
     marginTop: 12,
+    marginBottom: 12,
+  },
+
+  cardFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 10,
   },
-  hostText: {
-    color: TEXT_MUTED,
-    fontSize: 11,
-    flex: 1,
-    marginRight: 12,
-  },
-  viewButton: {
-    backgroundColor: ACCENT,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+
+  hostContainer: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
+    minWidth: 0,
   },
-  viewButtonText: {
-    color: "#fff",
+
+  hostIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: PANEL,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 9,
+  },
+
+  hostTextContainer: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  hostLabel: {
+    color: "#9A8875",
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+
+  hostText: {
+    color: BROWN,
     fontSize: 11,
     fontWeight: "700",
-    marginRight: 4,
   },
+
+  viewButton: {
+    backgroundColor: BROWN,
+    borderRadius: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+
+  viewButtonText: {
+    color: CREAM,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
   loadingBox: {
-    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    minHeight: 200,
+    minHeight: 180,
+    gap: 13,
   },
+
+  loadingText: {
+    color: TEXT_MUTED,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
   emptyBox: {
-    paddingVertical: 32,
+    paddingHorizontal: 22,
+    paddingVertical: 34,
     alignItems: "center",
+    backgroundColor: CARD_BG,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: BORDER,
+    marginTop: 3,
   },
+
+  emptyIconCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 23,
+    backgroundColor: PANEL,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+
+  emptyTitle: {
+    color: BROWN,
+    fontSize: 17,
+    fontWeight: "800",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+
   emptyText: {
     color: TEXT_MUTED,
-    fontSize: 14,
+    fontSize: 12,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+
+  resetButton: {
+    backgroundColor: BROWN,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 12,
+    marginTop: 17,
+  },
+
+  resetButtonText: {
+    color: CREAM,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  footerNote: {
+    flexDirection: "row",
+    marginTop: -9,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingVertical: 15,
+  },
+
+  footerNoteText: {
+    color: TEXT_MUTED,
+    fontSize: 11,
+    fontWeight: "600",
   },
 });
-

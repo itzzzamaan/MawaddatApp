@@ -12,12 +12,13 @@ const homefeedsRoutes = require("./routes/homefeeds");
 const carouselsRoutes = require("./routes/carousels");
 const usersRoutes = require("./routes/users");
 const uploadsRoutes = require("./routes/uploads");
+const notificationsRoutes = require("./routes/notifications");
 
 const app = express();
 app.use(
   cors({
     origin: "*", // Allow all origins
-    methods: ["GET", "POST", "PUT", "DELETE"], // Allow specific HTTP methods
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], // Allow specific HTTP methods
     allowedHeaders: ["Content-Type", "Authorization"], // Allow specific headers
     credentials: true, // Allow credentials (cookies, authorization headers, etc.)
   }),
@@ -44,5 +45,6 @@ app.use("/api/homefeeds", homefeedsRoutes);
 app.use("/api/carousels", carouselsRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/uploads", uploadsRoutes);
+app.use("/api/notifications", notificationsRoutes);
 
 module.exports = app;

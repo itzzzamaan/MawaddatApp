@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Location from "expo-location";
-import { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import {
   Dimensions,
+  DeviceEventEmitter,
   Image,
   Platform,
   Pressable,
@@ -15,6 +16,14 @@ import {
 import { widthPercentageToDP } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useCurrentLocation } from "../contexts/LocationContext";
+import { useSavedPosts } from "../contexts/SavedPostsContext";
+import * as SecureStore from "../utils/secureStorage";
+import { getApiBase } from "../utils/api";
+import {
+  registerPushDevice,
+  syncFollowedPoets,
+} from "../utils/notifications";
 import Sidebar from "./Sidebar";
 
 const windowWidth = Dimensions.get("window").width;
@@ -27,25 +36,66 @@ const ACCENT = "#C49A32";
 export default function Navbar() {
   const Icon = Ionicons;
 
-  const [locationName, setLocationName] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const { locationName } = useCurrentLocation();
+  const { followedPoets } = useSavedPosts();
+  const pushSetupUser = useRef(null);
 
-  useEffect(() => {
-    (async () => {
-      const { status } =
-        await Location.requestForegroundPermissionsAsync();
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      const refreshUnreadCount = async () => {
+        const token = await SecureStore.getItemAsync("user_token");
+        if (!token) {
+          if (active) setUnreadCount(0);
+          return;
+        }
+        const response = await fetch(
+          `${getApiBase()}/api/notifications/unread-count`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!response.ok) {
+          throw new Error(`Failed to load unread count (${response.status})`);
+        }
+        const result = await response.json();
+        if (active) setUnreadCount(Number(result.count) || 0);
+      };
+      const refreshNotifications = async () => {
+        try {
+          const token = await SecureStore.getItemAsync("user_token");
+          if (!token) {
+            if (active) setUnreadCount(0);
+            return;
+          }
 
-      if (status !== "granted") return;
+          await syncFollowedPoets(followedPoets, token);
+          await refreshUnreadCount();
 
-      const loc = await Location.getCurrentPositionAsync({});
-      const address = await Location.reverseGeocodeAsync(loc.coords);
+          if (pushSetupUser.current !== token) {
+            const registered = await registerPushDevice(token);
+            if (registered) pushSetupUser.current = token;
+          }
+        } catch (error) {
+          console.error("Failed to refresh notification status:", error);
+        }
+      };
+      const notificationListener = DeviceEventEmitter.addListener(
+        "mawaddat-notification-received",
+        () => {
+          refreshUnreadCount().catch((error) =>
+            console.error("Failed to refresh unread notification count:", error),
+          );
+        },
+      );
 
-      if (address.length > 0) {
-        const place = address[0];
-        setLocationName(`${place.city}, ${place.region}`);
-      }
-    })();
-  }, []);
+      refreshNotifications();
+      return () => {
+        active = false;
+        notificationListener.remove();
+      };
+    }, [followedPoets]),
+  );
 
   return (
     <>
@@ -86,12 +136,28 @@ export default function Navbar() {
               </View>
             </View>
 
-            <TouchableOpacity style={styles.notifyContainer}>
+            <TouchableOpacity
+              style={styles.notifyContainer}
+              onPress={() => router.push("/notifications")}
+              accessibilityRole="button"
+              accessibilityLabel={
+                unreadCount > 0
+                  ? `Notifications, ${unreadCount} unread`
+                  : "Notifications"
+              }
+            >
               <Icon
                 name="notifications"
                 size={24}
                 color={ICON_COLOR}
               />
+              {unreadCount > 0 ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
           </View>
         </View>
@@ -201,6 +267,25 @@ const styles = StyleSheet.create({
     backgroundColor: "#F0EAE3",
     borderRadius: 7,
     marginLeft: 8,
+    position: "relative",
+  },
+  badge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: "#B3261E",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: NAV_BG,
+  },
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "700",
   },
 });
-

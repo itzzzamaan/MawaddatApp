@@ -1,7 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "@/utils/secureStorage";
+import { unregisterPushDevice } from "../utils/notifications";
 import {
   Animated,
   Dimensions,
@@ -79,6 +80,14 @@ const Sidebar = ({ visible, onClose, username: usernameProp }) => {
 
   const handleLogout = async () => {
     try {
+      const userToken = await SecureStore.getItemAsync("user_token");
+      if (userToken) {
+        try {
+          await unregisterPushDevice(userToken);
+        } catch (error) {
+          console.error("Could not unregister push device on logout:", error);
+        }
+      }
       await SecureStore.deleteItemAsync("user_token");
       await SecureStore.deleteItemAsync("user_profile");
       await SecureStore.deleteItemAsync("user_account");
@@ -517,4 +526,3 @@ const styles = StyleSheet.create({
     marginTop: 13,
   },
 });
-

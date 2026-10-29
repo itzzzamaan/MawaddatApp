@@ -8,6 +8,11 @@ const UserSchema = new Schema({
   mobile: String,
   address: String,
   imageUri: String,
+  pushTokens: { type: [String], default: [] },
+  followedPoets: {
+    type: [{ id: { type: String, default: "" }, name: { type: String, default: "" } }],
+    default: [],
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', UserSchema);

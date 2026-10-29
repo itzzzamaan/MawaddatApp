@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "929703402001",
+    "project_id": "mawaddat-9262a",
+    "storage_bucket": "mawaddat-9262a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:929703402001:android:5968e4d00484d35a8f2fb0",
+        "android_client_info": {
+          "package_name": "Mawaddat.App"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBzAV6CjigPsmJM_UohWVMg_q30MJSJ4xY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

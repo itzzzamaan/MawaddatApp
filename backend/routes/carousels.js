@@ -144,24 +144,33 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
     console.log("Request body:", req.body);
     console.log("Uploaded file:", req.file);
 
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Image file was not received",
-      });
-    }
-
-    if (req.file.size === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Uploaded file is empty",
-      });
-    }
-
     const body = normalizeCarouselBody(req.body || {});
 
-    // Store only the relative URL in MongoDB.
-    body.image = `/uploads/${req.file.filename}`;
+    if (req.file) {
+      if (req.file.size === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Uploaded file is empty",
+        });
+      }
+      // Store only the relative URL in MongoDB.
+      body.image = `/uploads/${req.file.filename}`;
+    } else if (typeof body.image === "string" && body.image.trim()) {
+      // Admin app uploads via /api/uploads first and sends the resulting path.
+      const filename = getSafeImageFilename(body.image);
+      if (!filename && !/^https?:\/\//i.test(body.image)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid image path",
+        });
+      }
+      if (filename) body.image = `/uploads/${filename}`;
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Image was not received",
+      });
+    }
 
     const item = new CarouselSlide(body);
     await item.save();

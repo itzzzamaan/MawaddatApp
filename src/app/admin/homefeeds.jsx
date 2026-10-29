@@ -1,32 +1,15 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Image, ScrollView, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "@/utils/secureStorage";
 import { AdminContext } from './_layout';
 import { Colors } from '../../constants/theme';
 import Constants from 'expo-constants';
-import { normalizeImageUrl, uploadImageToApi } from '../../utils/api';
+import { getApiBase, normalizeImageUrl, uploadImageToApi } from '../../utils/api';
 
 const getAdminToken = async (currentToken) => {
   if (currentToken) return currentToken;
   return await SecureStore.getItemAsync('admin_token');
-};
-
-const getApiBase = () => {
-  const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
-  if (envHost) {
-    const normalized = envHost.replace(/\/$/, '');
-    return /^https?:\/\//i.test(normalized) ? normalized : `http://${normalized}`;
-  }
-
-  const expoHost = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
-  if (expoHost) {
-    const host = expoHost.split(':')[0];
-    return `http://${host}:4000`;
-  }
-  if (Platform.OS === 'android') return 'http://10.0.2.2:4000';
-  if (typeof window !== 'undefined' && window.location) return `http://${window.location.hostname}:4000`;
-  return 'http://localhost:4000';
 };
 
 const API = `${getApiBase()}/api`;

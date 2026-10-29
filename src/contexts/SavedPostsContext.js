@@ -7,6 +7,8 @@ import React, {
   useState,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "../utils/secureStorage";
+import { getApiBase } from "../utils/api";
 
 const SavedPostsContext = createContext(null);
 const STORAGE_KEY = "saved_posts";
@@ -77,6 +79,7 @@ export function SavedPostsProvider({ children }) {
   const [savedPosts, setSavedPosts] = useState([]);
   const [recentViewedPosts, setRecentViewedPosts] = useState([]);
   const [followedPoets, setFollowedPoets] = useState([]);
+  const [followedPoetsLoaded, setFollowedPoetsLoaded] = useState(false);
   const [savedPrograms, setSavedPrograms] = useState([]);
 
   useEffect(() => {
@@ -114,14 +117,16 @@ export function SavedPostsProvider({ children }) {
       try {
         const storedValue = await AsyncStorage.getItem(FOLLOWED_POETS_KEY);
 
-        if (!storedValue) return;
-
-        const parsed = JSON.parse(storedValue);
-        if (Array.isArray(parsed)) {
-          setFollowedPoets(parsed.map(normalizeFollowedPoet).filter(Boolean));
+        if (storedValue) {
+          const parsed = JSON.parse(storedValue);
+          if (Array.isArray(parsed)) {
+            setFollowedPoets(parsed.map(normalizeFollowedPoet).filter(Boolean));
+          }
         }
       } catch (error) {
         console.log("Failed to load followed poets:", error);
+      } finally {
+        setFollowedPoetsLoaded(true);
       }
     };
 
@@ -145,6 +150,33 @@ export function SavedPostsProvider({ children }) {
     loadFollowedPoets();
     loadSavedPrograms();
   }, []);
+
+  useEffect(() => {
+    if (!followedPoetsLoaded) return;
+    const syncFollowedPoets = async () => {
+      try {
+        const token = await SecureStore.getItemAsync("user_token");
+        if (!token) return;
+        const response = await fetch(`${getApiBase()}/api/notifications/followed-poets`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            followedPoets: followedPoets.map(({ id, name }) => ({ id, name })),
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to sync followed poets (${response.status})`);
+        }
+      } catch (error) {
+        console.error("Failed to sync followed poets:", error);
+      }
+    };
+
+    syncFollowedPoets();
+  }, [followedPoets, followedPoetsLoaded]);
 
   useEffect(() => {
     const persistSavedPosts = async () => {

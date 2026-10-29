@@ -5,6 +5,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -19,9 +20,15 @@ import {
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "@/utils/secureStorage";
 
 const getApiBase = () => {
+  // Dev web: the backend runs on the page's own host; a LAN IP baked into
+  // EXPO_PUBLIC_API_URL is usually unreachable from the browser.
+  if (Platform.OS === "web" && __DEV__ && typeof window !== "undefined") {
+    return `http://${window.location.hostname}:4000`;
+  }
+
   const envHost = process.env.EXPO_PUBLIC_API_URL;
   if (envHost) return envHost.replace(/\/$/, "");
 
@@ -39,6 +46,17 @@ const getApiBase = () => {
 
   return `http://${host}:4000`;
 };
+
+// On web, a press-handling wrapper blurs the input as soon as it is clicked,
+// so only dismiss the keyboard on tap for native.
+const DismissKeyboard = ({ children }) =>
+  Platform.OS === "web" ? (
+    children
+  ) : (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      {children}
+    </TouchableWithoutFeedback>
+  );
 
 export default function SignUp() {
   const router = useRouter();
@@ -111,11 +129,16 @@ export default function SignUp() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <DismissKeyboard>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
           {/* ================= HEADER ================= */}
           <View style={styles.header}>
             <Text style={styles.heading}>Welcome New User</Text>
@@ -194,8 +217,9 @@ export default function SignUp() {
               </Text>
             </View>
           </View>
+          </ScrollView>
         </KeyboardAvoidingView>
-      </TouchableWithoutFeedback>
+      </DismissKeyboard>
     </SafeAreaView>
   );
 }
@@ -205,6 +229,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.background,
     paddingTop: -12,
+  },
+
+  scrollContent: {
+    flexGrow: 1,
   },
 
   /* ---------- Header ---------- */
@@ -226,6 +254,7 @@ const styles = StyleSheet.create({
   /* ---------- Card ---------- */
   card: {
     flex: 1,
+    minHeight: 420,
     backgroundColor: Colors.light.backgroundElement,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,

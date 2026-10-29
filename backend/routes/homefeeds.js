@@ -1,7 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const HomeFeed = require("../models/HomeFeed");
+const { notifyPoetFollowersAboutPost } = require("../notificationService");
 const auth = require("../middleware/auth");
+const adminOnly = require("../middleware/adminOnly");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
@@ -180,6 +182,7 @@ router.get("/", async (req, res) => {
 router.post(
   "/",
   auth,
+  adminOnly,
   upload.fields([
     { name: "image", maxCount: 1 },
     { name: "avatar", maxCount: 1 },
@@ -198,6 +201,7 @@ router.post(
 
       const item = new HomeFeed(body);
       await item.save();
+      await notifyPoetFollowersAboutPost(item);
       res.json({
         ...item.toObject(),
         comments: normalizeCommentList(item.comments)
