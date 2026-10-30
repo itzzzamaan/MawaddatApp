@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
+const { connectToDatabase } = require('../database');
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mawaddat';
 const dryRun = process.argv.includes('--dry-run');
 const uploadDir = path.resolve(__dirname, '..', process.env.UPLOAD_DIR || 'uploads');
 
@@ -113,8 +113,8 @@ const repairCollection = async (name) => {
   const cleanup = deleteInvalidUploadedFiles();
   console.log(`Upload cleanup: removed=${cleanup.removed.length} files`, cleanup.removed.slice(0, 10));
 
-  await mongoose.connect(MONGO_URI);
-  console.log(`Mongo connected: ${MONGO_URI}`);
+  await connectToDatabase();
+  console.log('Mongo connected.');
 
   for (const name of Object.keys(collectionPolicies)) {
     await repairCollection(name);

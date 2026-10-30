@@ -1,35 +1,14 @@
-import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 export const getApiBase = () => {
-  const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
-  if (envHost) {
-    const normalized = envHost.replace(/\/$/, "");
-    return /^https?:\/\//i.test(normalized)
-      ? normalized
-      : `http://${normalized}`;
-  }
-
-  // Use the local backend only when no API URL has been configured.
-  if (Platform.OS === "web" && __DEV__ && typeof window !== "undefined") {
-    return `http://${window.location.hostname}:4000`;
-  }
-
-  const expoHost =
-    Constants.expoConfig?.hostUri ||
-    Constants.manifest?.debuggerHost ||
-    Constants.manifest2?.extra?.expoGo?.debuggerHost ||
-    Constants.expoGoConfig?.hostUri;
-
-  if (expoHost) {
-    const host = expoHost.split(":")[0];
-    if (host && host !== "localhost" && host !== "127.0.0.1") {
-      return `http://${host}:4000`;
-    }
-  }
-
-  if (Platform.OS === "android") return "http://10.0.2.2:4000";
-  return "http://localhost:4000";
+  const configuredUrl =
+    process.env.EXPO_PUBLIC_API_URL ||
+    process.env.API_URL ||
+    "https://mawaddat-app-backend.vercel.app";
+  const normalized = configuredUrl.trim().replace(/\/+$/, "");
+  return /^https?:\/\//i.test(normalized)
+    ? normalized
+    : `https://${normalized}`;
 };
 
 export const normalizeImageUrl = (value) => {

@@ -1,6 +1,5 @@
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
-import Constants from "expo-constants";
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -21,31 +20,7 @@ import {
 } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "@/utils/secureStorage";
-
-const getApiBase = () => {
-  // Dev web: the backend runs on the page's own host; a LAN IP baked into
-  // EXPO_PUBLIC_API_URL is usually unreachable from the browser.
-  if (Platform.OS === "web" && __DEV__ && typeof window !== "undefined") {
-    return `http://${window.location.hostname}:4000`;
-  }
-
-  const envHost = process.env.EXPO_PUBLIC_API_URL;
-  if (envHost) return envHost.replace(/\/$/, "");
-
-  if (Platform.OS === "web") return "http://localhost:4000";
-
-  const debuggerHost =
-    Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
-  let host = "10.0.2.2";
-
-  if (debuggerHost) {
-    host = debuggerHost.split(":")[0];
-  } else if (Platform.OS === "android") {
-    host = "10.0.2.2";
-  }
-
-  return `http://${host}:4000`;
-};
+import { getApiBase } from "../utils/api";
 
 // On web, a press-handling wrapper blurs the input as soon as it is clicked,
 // so only dismiss the keyboard on tap for native.

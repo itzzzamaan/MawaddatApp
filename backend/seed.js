@@ -1,12 +1,11 @@
-require('dotenv').config();
-const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const Admin = require('./models/Admin');
+const { connectToDatabase } = require('./database');
 
 const DEFAULT_EMAIL = (process.env.ADMIN_EMAIL || 'admin@test.com').trim().toLowerCase();
 const DEFAULT_PASSWORD = process.env.ADMIN_PASSWORD || 'test1234';
 
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/mawaddat').then(async () => {
+connectToDatabase().then(async () => {
   try {
     const existing = await Admin.findOne({ email: DEFAULT_EMAIL });
     const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);

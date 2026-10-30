@@ -8,7 +8,6 @@ import {
   Image,
   ImageBackground,
   Linking,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -20,21 +19,11 @@ import {
 } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../constants/theme";
+import { getApiBase, normalizeImageUrl } from "../utils/api";
 
 import gradientOverlay from "../app/assets/images/gradientOverlay.png";
 
 const { width } = Dimensions.get("window");
-
-import { normalizeImageUrl } from "../utils/api";
-
-
-const getApiBase = () => {
-  const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
-  if (envHost) return envHost.replace(/\/$/, "");
-  if (typeof window !== "undefined" && window.location)
-    return `http://${window.location.hostname}:4000`;
-  return "http://localhost:4000";
-};
 
 export default function SplashCarousel() {
   const [slides, setSlides] = useState([]);

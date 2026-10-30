@@ -9,7 +9,9 @@ cd backend
 npm install
 ```
 
-2. Copy `.env.example` to `.env` and edit `MONGO_URI` and `JWT_SECRET`.
+2. Copy `.env.example` to `.env` and set `MONGO_URI` to your MongoDB Atlas
+   connection string and `JWT_SECRET` to a strong secret. The backend does not
+   fall back to a local MongoDB instance.
 
 3. Seed test admin:
 

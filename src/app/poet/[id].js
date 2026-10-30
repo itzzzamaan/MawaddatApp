@@ -10,15 +10,13 @@ import {
   Alert,
   Share,
   Linking,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSavedPosts } from "../../contexts/SavedPostsContext";
 import Navbar from "../../components/Navbar";
-import Constants from "expo-constants";
-import { normalizeImageUrl } from "../../utils/api";
+import { getApiBase, normalizeImageUrl } from "../../utils/api";
 
 const PINK = "#2C1810";
 const PAGE_BG = "#F8F6F2";
@@ -34,23 +32,6 @@ const SHADOW = {
   shadowOpacity: 0.06,
   shadowRadius: 8,
   elevation: 2,
-};
-
-const getApiBase = () => {
-  const envHost = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
-  if (envHost) {
-    const normalized = envHost.replace(/\/$/, "");
-    return /^https?:\/\//i.test(normalized) ? normalized : `http://${normalized}`;
-  }
-
-  const expoHost = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
-  if (expoHost) {
-    const host = expoHost.split(":")[0];
-    return `http://${host}:4000`;
-  }
-
-  if (Platform.OS === "android") return "http://10.0.2.2:4000";
-  return "http://localhost:4000";
 };
 
 const resolveImageUrl = (value) => {
@@ -1150,4 +1131,3 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-

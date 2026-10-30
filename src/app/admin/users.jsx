@@ -2,18 +2,9 @@ import React, { useContext, useEffect, useState } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { AdminContext } from './_layout';
 import { Colors } from '../../constants/theme';
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { getApiBase } from '../../utils/api';
 
-const HOST = (() => {
-  const expoHost = Constants.manifest?.debuggerHost?.split(':')[0];
-  if (expoHost) return expoHost;
-  if (Platform.OS === 'android') return '10.0.2.2';
-  if (typeof window !== 'undefined' && window.location) return window.location.hostname;
-  return 'localhost';
-})();
-
-const API = `http://${HOST}:4000/api`;
+const API = `${getApiBase()}/api`;
 
 export default function AdminUsers() {
   const { token } = useContext(AdminContext);

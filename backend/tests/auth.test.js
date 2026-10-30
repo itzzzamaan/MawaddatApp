@@ -1,9 +1,10 @@
 const request = require('supertest');
 const app = require('../app');
 const mongoose = require('mongoose');
+const { connectToDatabase } = require('../database');
 
 beforeAll(async () => {
-  await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/mawaddat');
+  await connectToDatabase();
 });
 
 afterAll(async () => {
