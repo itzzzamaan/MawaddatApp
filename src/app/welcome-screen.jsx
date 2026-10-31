@@ -22,11 +22,12 @@ function SplashScreen() {
         if (adminToken) {
           router.replace("/admin/dashboard");
         } else if (userToken) {
-          router.replace("/(tabs)/Home");
+          router.replace("/Splash-carousel");
         } else {
           router.replace("/signin");
         }
       } catch (error) {
+        console.error("Unable to resolve the current session:", error);
         router.replace("/signin");
       }
     }, 2000);

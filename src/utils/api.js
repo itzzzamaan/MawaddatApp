@@ -4,7 +4,7 @@ export const getApiBase = () => {
   const configuredUrl =
     process.env.EXPO_PUBLIC_API_URL ||
     process.env.API_URL ||
-    "https://mawaddat-app-backend.vercel.app";
+    "http://192.168.133.223:4000";
   const normalized = configuredUrl.trim().replace(/\/+$/, "");
   return /^https?:\/\//i.test(normalized)
     ? normalized
@@ -19,9 +19,11 @@ export const normalizeImageUrl = (value) => {
   const cleaned = trimmed.replace(/\\/g, "/").replace(/\/+/g, "/");
 
   if (/^https?:\/\//i.test(trimmed)) {
-    const match = trimmed.replace(/\\/g, "/").match(
-      /(?:^https?:\/\/[^/]+)?\/uploads\/([^/?#]+\.(?:jpe?g|png|webp))$/i
-    );
+    const match = trimmed
+      .replace(/\\/g, "/")
+      .match(
+        /(?:^https?:\/\/[^/]+)?\/uploads\/([^/?#]+\.(?:jpe?g|png|webp))$/i,
+      );
     if (match) return `${getApiBase()}/uploads/${match[1]}`;
     return trimmed;
   }

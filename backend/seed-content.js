@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const { connectToDatabase } = require("./database");
 const Event = require("./models/Event");
 const HomeFeed = require("./models/HomeFeed");
+const Poet = require("./models/Poet");
 
 const eventDate = (daysFromNow) => {
   const date = new Date();
@@ -107,11 +108,28 @@ const posts = [
   },
 ];
 
-const upsertByTitle = (Model, records) =>
+const poets = [
+  {
+    name: "Mawaddat Community",
+    bio: "A community space for sharing poetry, reflection, and thoughtful words.",
+    description:
+      "A community space for sharing poetry, reflection, and thoughtful words.",
+    location: "Pakistan",
+    category: "Association",
+    famousFor: "Community poetry and reflection",
+    categories: ["Poetry", "Reflection"],
+    avatar:
+      "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=400&q=80",
+    image:
+      "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=800&q=85",
+  },
+];
+
+const upsertByKey = (Model, records, key = "title") =>
   Model.bulkWrite(
     records.map((record) => ({
       updateOne: {
-        filter: { title: record.title },
+        filter: { [key]: record[key] },
         update: { $setOnInsert: record },
         upsert: true,
       },
@@ -121,16 +139,19 @@ const upsertByTitle = (Model, records) =>
 const seedContent = async () => {
   await connectToDatabase();
 
-  const [eventResult, postResult] = await Promise.all([
-    upsertByTitle(Event, events),
-    upsertByTitle(HomeFeed, posts),
+  const [eventResult, postResult, poetResult] = await Promise.all([
+    upsertByKey(Event, events),
+    upsertByKey(HomeFeed, posts),
+    upsertByKey(Poet, poets, "name"),
   ]);
 
   console.log(
     `Sample content ready: ${eventResult.upsertedCount} events added, ` +
       `${events.length - eventResult.upsertedCount} already existed; ` +
       `${postResult.upsertedCount} posts added, ` +
-      `${posts.length - postResult.upsertedCount} already existed.`,
+      `${posts.length - postResult.upsertedCount} already existed; ` +
+      `${poetResult.upsertedCount} poets added, ` +
+      `${poets.length - poetResult.upsertedCount} already existed.`,
   );
 };
 
@@ -145,4 +166,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { events, posts, seedContent };
+module.exports = { events, posts, poets, seedContent };

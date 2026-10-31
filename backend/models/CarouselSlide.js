@@ -8,6 +8,7 @@ const CarouselSlideSchema = new Schema({
   label: String,
   image: String,
   order: Number,
+  placement: { type: String, enum: ['home', 'promotion'], default: 'home' },
   socialLinks: Schema.Types.Mixed,
 }, { timestamps: true });
 

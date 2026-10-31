@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { createRef, useEffect, useMemo, useState } from "react";
 import * as SecureStore from "@/utils/secureStorage";
 import {
   Dimensions,
   KeyboardAvoidingView,
   PixelRatio,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,7 +14,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Platform } from "react-native";
 import {
   heightPercentageToDP,
   widthPercentageToDP as wp,
@@ -33,15 +33,18 @@ const scale = (size) => {
 export default function VerifyOtp() {
   const router = useRouter();
   const [code, setCode] = useState(["", "", "", "", "", ""]);
-  const [timer, setTimer] = useState(30);
-  const [canResend, setCanResend] = useState(false);
+  const [timer, setTimer] = useState(60);
   const [contactLabel, setContactLabel] = useState(null);
   const [pending, setPending] = useState(null);
   const [error, setError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
 
-  const inputs = Array.from({ length: 6 }, () => useRef(null));
+  const inputs = useMemo(
+    () => Array.from({ length: 6 }, () => createRef()),
+    [],
+  );
+  const canResend = timer === 0;
 
   useEffect(() => {
     inputs[0].current?.focus();
@@ -54,11 +57,10 @@ export default function VerifyOtp() {
       }
     };
     loadPending();
-  }, []);
+  }, [inputs]);
 
   useEffect(() => {
     if (timer === 0) {
-      setCanResend(true);
       return;
     }
 
@@ -182,8 +184,7 @@ export default function VerifyOtp() {
       };
       await SecureStore.setItemAsync("pending_signup", JSON.stringify(updated));
       setPending(updated);
-      setTimer(30);
-      setCanResend(false);
+      setTimer(60);
       setCode(["", "", "", "", "", ""]);
       inputs[0].current?.focus();
     } catch (err) {

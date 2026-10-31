@@ -81,9 +81,19 @@ module.exports = ({ config }) => {
     );
     expoConfig.plugins = expoConfig.plugins.map((plugin) => {
       const pluginName = Array.isArray(plugin) ? plugin[0] : plugin;
-      return pluginName === "expo-build-properties"
-        ? ["expo-build-properties", { ios: { useFrameworks: "dynamic" } }]
-        : plugin;
+      if (pluginName !== "expo-build-properties") return plugin;
+
+      const pluginOptions = Array.isArray(plugin) ? plugin[1] || {} : {};
+      return [
+        "expo-build-properties",
+        {
+          ...pluginOptions,
+          ios: {
+            ...pluginOptions.ios,
+            useFrameworks: "dynamic",
+          },
+        },
+      ];
     });
   }
 

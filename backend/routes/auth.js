@@ -298,24 +298,31 @@ router.post('/user-login', async (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
-  const emailInput = String(req.body?.email || '').trim().toLowerCase();
-  const passwordInput = req.body?.password;
+  try {
+    const email = normalizeEmail(req.body?.email);
+    const password = req.body?.password;
+    if (!email || typeof password !== 'string' || password.length === 0) {
+      return res.status(400).json({ message: 'Email and password are required.' });
+    }
 
-  console.log('ADMIN LOGIN ATTEMPT:', { email: emailInput, passwordLength: passwordInput ? String(passwordInput).length : 0 });
+    const admin = await Admin.findOne({ email });
+    if (!admin || !(await bcrypt.compare(password, admin.password))) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
 
-  const admin = await Admin.findOne({ email: emailInput });
-  console.log('ADMIN LOOKUP RESULT:', !!admin, admin ? admin.email : null);
-
-  if (!admin) return res.status(401).json({ message: 'Invalid credentials' });
-
-  const ok = await bcrypt.compare(passwordInput, admin.password);
-  console.log('ADMIN PASSWORD CHECK:', ok);
-
-  if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
-
-  const token = jwt.sign({ id: admin._id, email: admin.email, role: 'admin' }, process.env.JWT_SECRET || 'change_this_secret', { expiresIn: '7d' });
-  console.log('ADMIN LOGIN SUCCESS:', admin.email);
-  res.json({ token, admin: { email: admin.email, name: admin.name } });
+    const token = jwt.sign(
+      { id: admin._id, email: admin.email, role: 'admin' },
+      process.env.JWT_SECRET || 'change_this_secret',
+      { expiresIn: '7d' },
+    );
+    return res.json({
+      token,
+      admin: { email: admin.email, name: admin.name },
+    });
+  } catch (error) {
+    console.error('Admin login failed:', error.name || 'UnknownError');
+    return res.status(500).json({ message: 'Unable to sign in right now.' });
+  }
 });
 
 module.exports = router;

@@ -1,6 +1,7 @@
+import * as SecureStore from "@/utils/secureStorage";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -16,12 +17,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import * as SecureStore from "@/utils/secureStorage";
-import { useSavedPosts } from "../../contexts/SavedPostsContext";
 import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
+import { useSavedPosts } from "../../contexts/SavedPostsContext";
 import { getApiBase, normalizeImageUrl } from "../../utils/api";
 
 const PINK = "#2C1810";
@@ -37,7 +37,9 @@ const resolveImageUrl = (value) => {
   if (value.startsWith("http://") || value.startsWith("https://")) return value;
 
   const cleaned = value.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
-  const match = cleaned.match(/(?:^|\/uploads\/)([^/?#]+\.(?:jpe?g|png|webp))$/i) || cleaned.match(/([^/?#]+\.(?:jpe?g|png|webp))$/i);
+  const match =
+    cleaned.match(/(?:^|\/uploads\/)([^/?#]+\.(?:jpe?g|png|webp))$/i) ||
+    cleaned.match(/([^/?#]+\.(?:jpe?g|png|webp))$/i);
   if (match) {
     return normalizeImageUrl(match[0]);
   }
@@ -45,24 +47,24 @@ const resolveImageUrl = (value) => {
   return normalizeImageUrl(value);
 };
 
-const COMMENT_USERS = [
-  {
-    name: "Ayesha Khan",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300",
-  },
-  {
-    name: "Hamza Ali",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300",
-  },
-  {
-    name: "Sara Raza",
-    avatar: "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=300",
-  },
-  {
-    name: "Usman Niaz",
-    avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=300",
-  },
-];
+// const COMMENT_USERS = [
+//   {
+//     name: "Ayesha Khan",
+//     avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300",
+//   },
+//   {
+//     name: "Hamza Ali",
+//     avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300",
+//   },
+//   {
+//     name: "Sara Raza",
+//     avatar: "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=300",
+//   },
+//   {
+//     name: "Usman Niaz",
+//     avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=300",
+//   },
+// ];
 
 const getLoggedInUserFallback = (user) => {
   const safeUser = user || {};
@@ -82,7 +84,11 @@ const getLoggedInUserFallback = (user) => {
   return { name, avatar };
 };
 
-const normalizeCommentItem = (comment, fallbackIndex = 0, fallbackUser = null) => {
+const normalizeCommentItem = (
+  comment,
+  fallbackIndex = 0,
+  fallbackUser = null,
+) => {
   if (!comment) return null;
 
   const fallbackProfile = getLoggedInUserFallback(fallbackUser);
@@ -136,7 +142,10 @@ const LANGUAGES = [
 ];
 
 const normalizeBackendFeed = (item = {}, fallbackUser = null) => {
-  const content = typeof item.content === "string" ? JSON.parse(item.content || "{}") : (item.content || {});
+  const content =
+    typeof item.content === "string"
+      ? JSON.parse(item.content || "{}")
+      : item.content || {};
   const normalizedContent = {
     roman: content.roman || content.text || "",
     urdu: content.urdu || "",
@@ -147,19 +156,27 @@ const normalizeBackendFeed = (item = {}, fallbackUser = null) => {
   const avatarValue = item.avatar || item.image || "";
   const comments = Array.isArray(item.comments)
     ? item.comments
-        .map((comment, index) => normalizeCommentItem(comment, index, fallbackUser))
+        .map((comment, index) =>
+          normalizeCommentItem(comment, index, fallbackUser),
+        )
         .filter(Boolean)
     : [];
 
   const hasImage = !!(imageValue && String(imageValue).trim());
-  const resolvedType = hasImage ? "image" : item.type === "video" ? "video" : "text";
+  const resolvedType = hasImage
+    ? "image"
+    : item.type === "video"
+      ? "video"
+      : "text";
 
   return {
     id: String(item._id || item.id || Date.now() + Math.random()),
     poetId: item.poetId || item.poet || "unknown-poet",
     poet: item.poet || item.poetName || "Unknown Poet",
     born: item.born || "",
-    avatar: resolveImageUrl(avatarValue) || "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
+    avatar:
+      resolveImageUrl(avatarValue) ||
+      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
     type: resolvedType,
     category: item.category || "SHAYARI",
     image: resolveImageUrl(imageValue) || "",
@@ -176,7 +193,8 @@ const normalizeBackendFeed = (item = {}, fallbackUser = null) => {
 const normalizeSavedItem = (item) => {
   const content = item?.content || {};
   const savedImage = typeof item?.image === "string" ? item.image : "";
-  const savedYoutubeUrl = typeof item?.youtubeUrl === "string" ? item.youtubeUrl : "";
+  const savedYoutubeUrl =
+    typeof item?.youtubeUrl === "string" ? item.youtubeUrl : "";
   const comments = Array.isArray(item?.comments)
     ? item.comments
         .map((comment, index) => normalizeCommentItem(comment, index))
@@ -193,27 +211,15 @@ const normalizeSavedItem = (item) => {
       "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
     image: savedImage,
     youtubeUrl: savedYoutubeUrl,
-    type: item?.type === "image" || item?.type === "video" || savedImage ? "image" : "text",
+    type:
+      item?.type === "image" || item?.type === "video" || savedImage
+        ? "image"
+        : "text",
     category: item?.category || "SHAYARI",
     content: {
-      roman:
-        content.roman ||
-        content.urdu ||
-        content.hindi ||
-        item?.text ||
-        "",
-      urdu:
-        content.urdu ||
-        content.roman ||
-        content.hindi ||
-        item?.text ||
-        "",
-      hindi:
-        content.hindi ||
-        content.roman ||
-        content.urdu ||
-        item?.text ||
-        "",
+      roman: content.roman || content.urdu || content.hindi || item?.text || "",
+      urdu: content.urdu || content.roman || content.hindi || item?.text || "",
+      hindi: content.hindi || content.roman || content.urdu || item?.text || "",
     },
     comments,
     following: Boolean(item?.following),
@@ -229,13 +235,17 @@ const POET_PROFILE_MAP = {
   "Parveen Shakir": "parveen-shakir",
 };
 
-const getPoetId = (post) => post?.poetId || POET_PROFILE_MAP[post?.poet] || null;
+const getPoetId = (post) =>
+  post?.poetId || POET_PROFILE_MAP[post?.poet] || null;
 
 const openPoetProfile = (post) => {
   const poetId = getPoetId(post);
 
   if (!poetId) {
-    Alert.alert("Poet profile unavailable", "This profile is not available right now.");
+    Alert.alert(
+      "Poet profile unavailable",
+      "This profile is not available right now.",
+    );
     return;
   }
 
@@ -258,7 +268,14 @@ export default function Categories({ showOnlySaved = false }) {
   const [commentText, setCommentText] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
 
-  const { savedPosts, toggleSavedPost, isPostSaved, addRecentViewedPost, toggleFollowedPoet, isPoetFollowed } = useSavedPosts();
+  const {
+    savedPosts,
+    toggleSavedPost,
+    isPostSaved,
+    addRecentViewedPost,
+    toggleFollowedPoet,
+    isPoetFollowed,
+  } = useSavedPosts();
 
   useEffect(() => {
     const loadCurrentUser = async () => {
@@ -281,7 +298,9 @@ export default function Categories({ showOnlySaved = false }) {
     try {
       const response = await fetch(`${getApiBase()}/api/homefeeds`);
       const json = await response.json();
-      const data = Array.isArray(json) ? json.map((item) => normalizeBackendFeed(item, currentUser)) : [];
+      const data = Array.isArray(json)
+        ? json.map((item) => normalizeBackendFeed(item, currentUser))
+        : [];
       setPosts(data);
     } catch (error) {
       console.log("Failed to load home feeds:", error);
@@ -296,9 +315,12 @@ export default function Categories({ showOnlySaved = false }) {
   const allSavedPosts = useMemo(
     () =>
       savedPosts
-        .filter((savedPost) => !posts.some((post) => post.id === String(savedPost.id)))
+        .filter(
+          (savedPost) =>
+            !posts.some((post) => post.id === String(savedPost.id)),
+        )
         .map((item) => normalizeSavedItem(item)),
-    [savedPosts, posts]
+    [savedPosts, posts],
   );
 
   const handleOpenPoetProfile = (post) => {
@@ -319,15 +341,13 @@ export default function Categories({ showOnlySaved = false }) {
         following:
           Boolean(post.following) ||
           Boolean(isPoetFollowed(getPoetId(post) || post.poet)),
-      }))
+      })),
     );
   }, [savedPosts, isPoetFollowed]);
 
   const updatePost = (id, changes) => {
     setPosts((current) =>
-      current.map((post) =>
-        post.id === id ? { ...post, ...changes } : post
-      )
+      current.map((post) => (post.id === id ? { ...post, ...changes } : post)),
     );
   };
 
@@ -372,8 +392,12 @@ export default function Categories({ showOnlySaved = false }) {
     }
 
     const user = currentUser || null;
-    const userName = user?.name || user?.fullName || user?.email?.split("@")?.[0] || "User";
-    const userAvatar = user?.imageUri || user?.avatar || "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300";
+    const userName =
+      user?.name || user?.fullName || user?.email?.split("@")?.[0] || "User";
+    const userAvatar =
+      user?.imageUri ||
+      user?.avatar ||
+      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300";
     const authToken = await SecureStore.getItemAsync("user_token");
 
     if (!authToken) {
@@ -382,19 +406,22 @@ export default function Categories({ showOnlySaved = false }) {
     }
 
     try {
-      const response = await fetch(`${getApiBase()}/api/homefeeds/${commentPostId}/comments`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
+      const response = await fetch(
+        `${getApiBase()}/api/homefeeds/${commentPostId}/comments`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            text: commentText.trim(),
+            userId: user?.id || user?._id || "",
+            userName,
+            userAvatar,
+          }),
         },
-        body: JSON.stringify({
-          text: commentText.trim(),
-          userId: user?.id || user?._id || "",
-          userName,
-          userAvatar,
-        }),
-      });
+      );
 
       const json = await response.json();
       if (!response.ok) {
@@ -411,23 +438,29 @@ export default function Categories({ showOnlySaved = false }) {
               text: commentText.trim(),
               userName,
               userAvatar,
-            })
+            }),
           ].filter(Boolean);
 
       setPosts((current) =>
         current.map((post) =>
           post.id === commentPostId
             ? { ...post, comments: serverComments }
-            : post
-        )
+            : post,
+        ),
       );
 
       setCommentText("");
       setCommentPostId(null);
-      Alert.alert("Comment added", "Your comment was saved and is now visible on the post.");
+      Alert.alert(
+        "Comment added",
+        "Your comment was saved and is now visible on the post.",
+      );
     } catch (error) {
       console.log("Comment submit failed:", error);
-      Alert.alert("Unable to add comment", error.message || "Please try again.");
+      Alert.alert(
+        "Unable to add comment",
+        error.message || "Please try again.",
+      );
     }
   };
 
@@ -446,7 +479,7 @@ export default function Categories({ showOnlySaved = false }) {
 
     if (youtubeUrl) {
       Linking.openURL(youtubeUrl).catch(() =>
-        Alert.alert("Invalid URL", "The provided URL is not valid.")
+        Alert.alert("Invalid URL", "The provided URL is not valid."),
       );
     } else if (image) {
       Alert.alert("Image URL", image);
@@ -455,7 +488,8 @@ export default function Categories({ showOnlySaved = false }) {
 
   const renderPost = ({ item }) => {
     const normalizedItem = normalizeSavedItem(item);
-    const displayContent = normalizedItem.content?.[language] || normalizedItem.text || "";
+    const displayContent =
+      normalizedItem.content?.[language] || normalizedItem.text || "";
     const commentTotal = getCommentCount(normalizedItem);
 
     return (
@@ -466,7 +500,10 @@ export default function Categories({ showOnlySaved = false }) {
             onPress={() => handleOpenPoetProfile(normalizedItem)}
             style={styles.avatarButton}
           >
-            <Image source={{ uri: normalizedItem.avatar }} style={styles.avatar} />
+            <Image
+              source={{ uri: normalizedItem.avatar }}
+              style={styles.avatar}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -586,7 +623,12 @@ export default function Categories({ showOnlySaved = false }) {
               color={normalizedItem.liked ? "#D64B4B" : "#2C1810"}
             />
 
-            <Text style={[styles.actionCount, normalizedItem.liked && { color: "#D64B4B" }]}>
+            <Text
+              style={[
+                styles.actionCount,
+                normalizedItem.liked && { color: "#D64B4B" },
+              ]}
+            >
               {normalizedItem.likes >= 1000
                 ? `${(normalizedItem.likes / 1000).toFixed(1)}K`
                 : normalizedItem.likes}
@@ -613,7 +655,8 @@ export default function Categories({ showOnlySaved = false }) {
           <TouchableOpacity
             style={styles.iconButton}
             onPress={() => {
-              const wasSaved = normalizedItem.saved || isPostSaved(normalizedItem.id);
+              const wasSaved =
+                normalizedItem.saved || isPostSaved(normalizedItem.id);
               toggleSave(normalizedItem);
               toggleSavedPost(normalizedItem);
 
@@ -621,14 +664,22 @@ export default function Categories({ showOnlySaved = false }) {
                 wasSaved ? "Removed from Wishlist" : "Saved to Wishlist",
                 wasSaved
                   ? "This Shayari was removed from your saved posts."
-                  : "This Shayari was added to your saved posts."
+                  : "This Shayari was added to your saved posts.",
               );
             }}
           >
             <Ionicons
-              name={normalizedItem.saved || isPostSaved(normalizedItem.id) ? "bookmark" : "bookmark-outline"}
+              name={
+                normalizedItem.saved || isPostSaved(normalizedItem.id)
+                  ? "bookmark"
+                  : "bookmark-outline"
+              }
               size={24}
-              color={normalizedItem.saved || isPostSaved(normalizedItem.id) ? "#C49A32" : "#2C1810"}
+              color={
+                normalizedItem.saved || isPostSaved(normalizedItem.id)
+                  ? "#C49A32"
+                  : "#2C1810"
+              }
             />
           </TouchableOpacity>
         </View>
@@ -686,11 +737,17 @@ export default function Categories({ showOnlySaved = false }) {
               </View>
 
               <FlatList
-                data={posts.find((post) => post.id === commentPostId)?.comments || []}
+                data={
+                  posts.find((post) => post.id === commentPostId)?.comments ||
+                  []
+                }
                 keyExtractor={(item) => String(item.id)}
                 renderItem={({ item }) => (
                   <View style={styles.commentItem}>
-                    <Image source={{ uri: item.userAvatar }} style={styles.commentAvatar} />
+                    <Image
+                      source={{ uri: item.userAvatar }}
+                      style={styles.commentAvatar}
+                    />
                     <View style={styles.commentContent}>
                       <Text style={styles.commentUser}>{item.userName}</Text>
                       <Text style={styles.commentText}>{item.text}</Text>
@@ -715,7 +772,10 @@ export default function Categories({ showOnlySaved = false }) {
                   style={styles.commentInput}
                   multiline
                 />
-                <TouchableOpacity onPress={submitComment} style={styles.sendButton}>
+                <TouchableOpacity
+                  onPress={submitComment}
+                  style={styles.sendButton}
+                >
                   <Ionicons name="send" size={19} color="#FFFFFF" />
                 </TouchableOpacity>
               </View>
@@ -774,7 +834,7 @@ const styles = StyleSheet.create({
   },
   postCard: {
     backgroundColor: CARD,
-    
+
     marginBottom: hp(2.5),
     borderRadius: 24,
     overflow: "hidden",
@@ -1083,4 +1143,3 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 });
-

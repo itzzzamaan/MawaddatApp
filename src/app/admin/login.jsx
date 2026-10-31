@@ -21,10 +21,6 @@ export default function AdminLogin() {
       await SecureStore.deleteItemAsync('admin_token');
       await SecureStore.deleteItemAsync('admin_user');
 
-      console.log('ADMIN LOGIN START');
-      console.log('BASE_URL:', base);
-      console.log('PAYLOAD:', { email: trimmedEmail, password: '***' });
-
       const res = await fetch(base + '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -32,22 +28,19 @@ export default function AdminLogin() {
       });
 
       const text = await res.text();
-      console.log('RESPONSE_STATUS:', res.status);
-      console.log('RESPONSE_RAW:', text);
 
       let json = {};
       try {
         json = JSON.parse(text);
-      } catch (e) {
+      } catch {
         json = { message: text };
       }
 
       if (!res.ok) return setError(json.message || `Login failed (${res.status})`);
       await login(json.token, json.admin);
-      console.log('ADMIN LOGIN SUCCESS');
       router.replace('/admin/dashboard');
     } catch (err) {
-      console.log('ADMIN LOGIN CATCH ERROR:', err);
+      console.error('Admin login request failed:', err);
       setError('Network error: ' + (err.message || String(err)));
     }
   };

@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const CarouselSlide = require("../models/CarouselSlide");
 const auth = require("../middleware/auth");
+const adminOnly = require("../middleware/adminOnly");
 const { saveImageAsset } = require("../database");
 const multer = require("multer");
 const path = require("path");
@@ -57,6 +58,14 @@ const normalizeCarouselBody = (body = {}) => {
   return normalized;
 };
 
+const getPlacement = (req) =>
+  req.baseUrl.endsWith("/promotions") ? "promotion" : "home";
+
+const getPlacementFilter = (req) =>
+  getPlacement(req) === "promotion"
+    ? { placement: "promotion" }
+    : { $or: [{ placement: "home" }, { placement: { $exists: false } }] };
+
 const getSafeImageFilename = (value) => {
   if (!value || typeof value !== "string") return "";
   const normalized = value.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
@@ -84,28 +93,17 @@ const serializeCarousel = (item, req) => {
 };
 
 router.get("/", async (req, res) => {
-  const items = await CarouselSlide.find().sort({ order: 1, createdAt: -1 });
+  const items = await CarouselSlide.find(getPlacementFilter(req)).sort({
+    order: 1,
+    createdAt: -1,
+  });
   res.json(items.map((item) => serializeCarousel(item, req)));
 });
 
-// router.post("/", auth, upload.single("image"), async (req, res) => {
-//   try {
-//     const body = normalizeCarouselBody(req.body || {});
-//     if (req.file)
-//       body.image =
-//         "/" + (process.env.UPLOAD_DIR || "uploads") + "/" + req.file.filename;
-//     const item = new CarouselSlide(body);
-//     await item.save();
-//     res.json(item);
-//   } catch (err) {
-//     console.error("Create carousel error:", err);
-//     res.status(500).json({ message: "Failed to create carousel slide" });
-//   }
-// });
-
-router.post("/", auth, upload.single("image"), async (req, res) => {
+router.post("/", auth, adminOnly, upload.single("image"), async (req, res) => {
   try {
     const body = normalizeCarouselBody(req.body || {});
+    body.placement = getPlacement(req);
 
     if (req.file) {
       if (req.file.size === 0) {
@@ -154,21 +152,28 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  const item = await CarouselSlide.findById(req.params.id);
+  const item = await CarouselSlide.findOne({
+    _id: req.params.id,
+    ...getPlacementFilter(req),
+  });
   if (!item) return res.status(404).json({ message: "Carousel slide not found" });
   res.json(serializeCarousel(item, req));
 });
 
-router.put("/:id", auth, upload.single("image"), async (req, res) => {
+router.put("/:id", auth, adminOnly, upload.single("image"), async (req, res) => {
   try {
     const body = normalizeCarouselBody(req.body || {});
+    body.placement = getPlacement(req);
     if (req.file?.buffer) {
       const saved = await saveImageAsset(req.file.buffer, req.file.mimetype);
       body.image = saved.path;
     }
-    const item = await CarouselSlide.findByIdAndUpdate(req.params.id, body, {
-      new: true,
-    });
+    const item = await CarouselSlide.findOneAndUpdate(
+      { _id: req.params.id, ...getPlacementFilter(req) },
+      body,
+      { new: true, runValidators: true },
+    );
+    if (!item) return res.status(404).json({ message: "Carousel slide not found" });
     res.json(item);
   } catch (err) {
     console.error("Update carousel error:", err);
@@ -176,8 +181,12 @@ router.put("/:id", auth, upload.single("image"), async (req, res) => {
   }
 });
 
-router.delete("/:id", auth, async (req, res) => {
-  await CarouselSlide.findByIdAndDelete(req.params.id);
+router.delete("/:id", auth, adminOnly, async (req, res) => {
+  const item = await CarouselSlide.findOneAndDelete({
+    _id: req.params.id,
+    ...getPlacementFilter(req),
+  });
+  if (!item) return res.status(404).json({ message: "Carousel slide not found" });
   res.json({ success: true });
 });
 

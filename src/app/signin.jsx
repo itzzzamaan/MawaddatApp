@@ -33,7 +33,7 @@ const SignIn = () => {
         return;
       }
       const userToken = await SecureStore.getItemAsync("user_token");
-      if (userToken) router.replace("/(tabs)/Home");
+      if (userToken) router.replace("/Splash-carousel");
     };
     check();
   }, [router]);
@@ -110,7 +110,7 @@ const SignIn = () => {
       await SecureStore.setItemAsync("user_account", JSON.stringify(user));
       await SecureStore.setItemAsync("user_profile", JSON.stringify(user));
       setError("");
-      router.replace("/(tabs)/Home");
+      router.replace("/Splash-carousel");
       return;
     } catch (err) {
       setError("Network error: " + (err.message || String(err)));

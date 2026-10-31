@@ -30,15 +30,22 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./src/app/assets/images/Mawaddatlogo.png",
-          "imageWidth": 76
+          "backgroundColor": "#2C1810"
         }
       ],
       "expo-asset",
-      "expo-build-properties",
+      "expo-image",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
       "expo-secure-store",
       "expo-notifications",
+      "expo-web-browser",
       "@react-native-firebase/app",
       "@react-native-firebase/messaging"
     ],

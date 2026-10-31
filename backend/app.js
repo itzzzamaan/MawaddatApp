@@ -79,6 +79,7 @@ app.use("/api/events", eventsRoutes);
 app.use("/api/poets", poetsRoutes);
 app.use("/api/homefeeds", homefeedsRoutes);
 app.use("/api/carousels", carouselsRoutes);
+app.use("/api/promotions", carouselsRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/uploads", uploadsRoutes);
 app.use("/api/notifications", notificationsRoutes);

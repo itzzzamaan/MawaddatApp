@@ -1,10 +1,9 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Image, ScrollView, Platform } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Image, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as SecureStore from "@/utils/secureStorage";
 import { AdminContext } from './_layout';
 import { Colors } from '../../constants/theme';
-import Constants from 'expo-constants';
 import { getApiBase, normalizeImageUrl, uploadImageToApi } from '../../utils/api';
 
 const getAdminToken = async (currentToken) => {
@@ -13,6 +12,7 @@ const getAdminToken = async (currentToken) => {
 };
 
 const API = `${getApiBase()}/api`;
+const HOME_CAROUSELS_API = `${API}/carousels`;
 
 const resolveImageUrl = (value) => {
   if (!value) return null;
@@ -41,21 +41,19 @@ export default function AdminCarousels() {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState(emptySlide);
   const [image, setImage] = useState(null);
-  const [imageBase64, setImageBase64] = useState(null);
   const [editingId, setEditingId] = useState(null);
 
-  useEffect(() => { fetchList(); }, []);
-
   const fetchList = async () => {
-    const res = await fetch(API + '/carousels');
+    const res = await fetch(HOME_CAROUSELS_API);
     const json = await res.json();
     setItems(json || []);
   };
 
+  useEffect(() => { Promise.resolve().then(fetchList); }, []);
+
   const resetForm = () => {
     setForm(emptySlide);
     setImage(null);
-    setImageBase64(null);
     setEditingId(null);
   };
 
@@ -64,16 +62,18 @@ export default function AdminCarousels() {
   const pickImage = async () => {
     const res = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!res.granted) return;
-    const p = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsEditing: true, base64: true });
-    if (p.cancelled) return;
-    const photo = p.assets && p.assets[0] ? p.assets[0] : p;
-    const uri = photo?.uri || null;
+    const p = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      allowsEditing: true,
+    });
+    if (p.canceled) return;
+    const uri = p.assets?.[0]?.uri || null;
     if (!uri) {
       alert('No image selected');
       return;
     }
     setImage(uri);
-    setImageBase64(photo?.base64 || null);
   };
 
   const create = async () => {
@@ -98,7 +98,7 @@ export default function AdminCarousels() {
         payload.append('image', imagePath);
       }
 
-      const res = await fetch(API + '/carousels', {
+      const res = await fetch(HOME_CAROUSELS_API, {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + authToken },
         body: payload,
@@ -149,7 +149,7 @@ export default function AdminCarousels() {
         payload.append('image', imagePath);
       }
 
-      const res = await fetch(API + '/carousels/' + id, {
+      const res = await fetch(HOME_CAROUSELS_API + '/' + id, {
         method: 'PUT',
         headers: { Authorization: 'Bearer ' + authToken },
         body: payload,
@@ -176,7 +176,7 @@ export default function AdminCarousels() {
       alert('Not authenticated. Please login as admin.');
       return;
     }
-    await fetch(API + '/carousels/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + authToken } });
+    await fetch(HOME_CAROUSELS_API + '/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + authToken } });
     fetchList();
   };
 

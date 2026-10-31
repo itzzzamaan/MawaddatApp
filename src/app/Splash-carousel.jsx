@@ -1,11 +1,11 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as SecureStore from "@/utils/secureStorage";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
-  Image,
   ImageBackground,
   Linking,
   StyleSheet,
@@ -21,32 +21,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../constants/theme";
 import { getApiBase, normalizeImageUrl } from "../utils/api";
 
-import gradientOverlay from "../app/assets/images/gradientOverlay.png";
-
 const { width } = Dimensions.get("window");
 
 export default function SplashCarousel() {
   const [slides, setSlides] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
   const router = useRouter();
 
-  useEffect(() => {
-    const loadSlides = async () => {
-      try {
-        const res = await fetch(`${getApiBase()}/api/carousels`);
-        const data = await res.json();
-        setSlides(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.log("Failed to load splash slides", err);
-        setSlides([]);
-      }
-    };
-
-    loadSlides();
-  }, []);
-
-  const handleAfterCarousel = async () => {
+  const handleAfterCarousel = useCallback(async () => {
     try {
       const adminToken = await SecureStore.getItemAsync("admin_token");
       const userToken = await SecureStore.getItemAsync("user_token");
@@ -56,12 +40,41 @@ export default function SplashCarousel() {
       } else if (userToken) {
         router.replace("/(tabs)/Home");
       } else {
-        router.replace("/(tabs)/Home");
+        router.replace("/signin");
       }
     } catch (error) {
-      router.replace("/(tabs)/Home");
+      console.error("Unable to resolve post-promotion destination:", error);
+      router.replace("/signin");
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPromotions = async () => {
+      try {
+        const response = await fetch(`${getApiBase()}/api/promotions`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message || "Unable to load promotions.");
+        }
+
+        const promotions = Array.isArray(data) ? data : [];
+        if (active) setSlides(promotions);
+        if (active && !promotions.length) await handleAfterCarousel();
+      } catch (error) {
+        console.error("Failed to load splash promotions:", error);
+        if (active) await handleAfterCarousel();
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    loadPromotions();
+    return () => {
+      active = false;
+    };
+  }, [handleAfterCarousel]);
 
   const handleContinue = async () => {
     if (!slides.length) {
@@ -94,23 +107,21 @@ export default function SplashCarousel() {
 
   const renderItem = ({ item }) => {
     const socialLinks = item.socialLinks || {};
+    const title = item.title || item.label;
+    const subtitle = item.subtitle || item.description;
     const visibleSocials = Object.entries(socialLinks).filter(
-      ([, value]) => typeof value === "string" && value.trim().length > 0
+      ([, value]) => typeof value === "string" && value.trim().length > 0,
     );
-    const imageSource = item.image ? { uri: normalizeImageUrl(item.image) } : null;
+    const imageSource = item.image
+      ? { uri: normalizeImageUrl(item.image) }
+      : null;
 
     return (
       <ImageBackground
-        source={imageSource || gradientOverlay}
+        source={imageSource}
         style={styles.slide}
         resizeMode="cover"
       >
-        <Image
-          source={gradientOverlay}
-          style={styles.gradient}
-          resizeMode="stretch"
-        />
-
         <View style={styles.overlay}>
           <TouchableOpacity
             style={styles.skipBtn}
@@ -121,10 +132,8 @@ export default function SplashCarousel() {
           </TouchableOpacity>
 
           <View style={styles.textWrapper}>
-            <Text style={styles.title}>{item.title || item.label || "Welcome"}</Text>
-            <Text style={styles.subtitle}>
-              {item.subtitle || item.description || "Explore beautiful poetry."}
-            </Text>
+            {title ? <Text style={styles.title}>{title}</Text> : null}
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
 
           <View style={styles.bottomRow}>
@@ -159,7 +168,7 @@ export default function SplashCarousel() {
             >
               <Text style={styles.continueText}>
                 {currentIndex === Math.max(slides.length - 1, 0)
-                  ? "Get Started"
+                  ? "Explore Mawaddat"
                   : "Continue"}
               </Text>
             </TouchableOpacity>
@@ -170,10 +179,7 @@ export default function SplashCarousel() {
           {slides.map((_, index) => (
             <View
               key={index}
-              style={[
-                styles.dot,
-                currentIndex === index && styles.activeDot,
-              ]}
+              style={[styles.dot, currentIndex === index && styles.activeDot]}
             />
           ))}
         </View>
@@ -181,22 +187,17 @@ export default function SplashCarousel() {
     );
   };
 
-  if (!slides.length) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No welcome slides available yet.</Text>
-          <TouchableOpacity
-            style={styles.continueBtn}
-            onPress={handleAfterCarousel}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.continueText}>Continue</Text>
-          </TouchableOpacity>
+          <ActivityIndicator size="large" color="#C49A32" />
         </View>
       </SafeAreaView>
     );
   }
+
+  if (!slides.length) return null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -214,9 +215,7 @@ export default function SplashCarousel() {
           index,
         })}
         onMomentumScrollEnd={(event) => {
-          const index = Math.round(
-            event.nativeEvent.contentOffset.x / width
-          );
+          const index = Math.round(event.nativeEvent.contentOffset.x / width);
           setCurrentIndex(index);
         }}
       />
@@ -241,12 +240,7 @@ const styles = StyleSheet.create({
   slide: {
     width,
     height: "100%",
-  },
-
-  gradient: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
+    backgroundColor: "#2C1810",
   },
 
   overlay: {
