@@ -27,6 +27,13 @@ Default test admin: email `admin@test.com` password `test1234`.
 npm run dev
 ```
 
+5. Add sample posts and events to the configured MongoDB database (safe to run
+   more than once; existing records are not overwritten):
+
+```bash
+npm run seed:content
+```
+
 API endpoints:
 - POST /api/auth/login  { email, password }
 - GET /api/events

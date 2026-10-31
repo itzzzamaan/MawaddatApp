@@ -33,8 +33,22 @@ app.use("/api", async (req, res, next) => {
     await connectToDatabase();
     next();
   } catch (error) {
-    console.error("MongoDB connection failed:", error.name || "UnknownError");
-    res.status(503).json({ message: "Database unavailable." });
+    const missingMongoUri = !process.env.MONGO_URI;
+    const code = missingMongoUri
+      ? "MONGO_URI_MISSING"
+      : "MONGODB_CONNECTION_FAILED";
+
+    console.error(
+      `${code}:`,
+      error.name || "UnknownError",
+      error.code || "",
+    );
+    res.status(503).json({
+      code,
+      message: missingMongoUri
+        ? "Backend database configuration is missing. Set MONGO_URI in Vercel and redeploy."
+        : "Backend cannot connect to MongoDB. Check the Atlas database user, password, and Network Access allowlist.",
+    });
   }
 });
 

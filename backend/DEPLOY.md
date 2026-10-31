@@ -13,6 +13,12 @@ settings for every environment you deploy:
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` if signup
   and password-reset verification emails should be delivered
 
+After adding or changing `MONGO_URI`, redeploy the backend so the deployment
+receives the setting. In MongoDB Atlas, verify the database user/password and
+that the cluster's Network Access rules permit connections from the Vercel
+deployment. Prefer Vercel static outbound IPs or another restricted allowlist
+over opening the database to all IP addresses.
+
 The backend connects to MongoDB when an API request arrives. Confirm deployment
 and database connectivity by requesting `/api/health`; a healthy response
 includes `"database":"connected"`. Do not commit `.env` files.
