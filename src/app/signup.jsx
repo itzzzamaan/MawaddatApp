@@ -20,7 +20,11 @@ import {
 } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "@/utils/secureStorage";
-import { getApiBase } from "../utils/api";
+import {
+  getFirebaseAuthApi,
+  getFirebaseAuthErrorMessage,
+} from "../utils/firebaseAuth";
+import GoogleAuthButton from "../components/GoogleAuthButton";
 
 // On web, a press-handling wrapper blurs the input as soon as it is clicked,
 // so only dismiss the keyboard on tap for native.
@@ -40,7 +44,7 @@ export default function SignUp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -69,36 +73,36 @@ export default function SignUp() {
     }
 
     try {
-      setIsSendingOtp(true);
+      setIsCreatingAccount(true);
       setError("");
 
-      const base = getApiBase();
-      const response = await fetch(`${base}/api/auth/send-signup-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
-      });
+      const firebaseAuth = await getFirebaseAuthApi();
+      const auth = firebaseAuth.getAuth();
+      const { user } = await firebaseAuth.createUserWithEmailAndPassword(
+        auth,
+        email.trim().toLowerCase(),
+        password,
+      );
+      await firebaseAuth.updateProfile(user, { displayName: name.trim() });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Failed to send OTP");
+      let mailError = "";
+      try {
+        await firebaseAuth.sendEmailVerification(user);
+      } catch (emailError) {
+        mailError = getFirebaseAuthErrorMessage(emailError);
       }
 
-      const pending = {
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        password,
-        otp: data.otp || null,
-        createdAt: Date.now(),
-      };
-
-      await SecureStore.setItemAsync("pending_signup", JSON.stringify(pending));
-      router.push({ pathname: "/Otp", params: { email: pending.email } });
+      router.replace({
+        pathname: "/Otp",
+        params: {
+          email: user.email || email.trim().toLowerCase(),
+          mailError,
+        },
+      });
     } catch (err) {
-      setError(err.message || "Unable to send OTP. Please try again.");
+      setError(getFirebaseAuthErrorMessage(err));
     } finally {
-      setIsSendingOtp(false);
+      setIsCreatingAccount(false);
     }
   };
 
@@ -166,18 +170,20 @@ export default function SignUp() {
               />
             </View>
 
+            <GoogleAuthButton />
+
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             {/* ================= BOTTOM ================= */}
             <View style={styles.bottomContainer}>
               <TouchableOpacity
-                style={[styles.continueBtn, isSendingOtp && styles.disabledBtn]}
+                style={[styles.continueBtn, isCreatingAccount && styles.disabledBtn]}
                 activeOpacity={0.8}
                 onPress={handleSignup}
-                disabled={isSendingOtp}
+                disabled={isCreatingAccount}
               >
                 <Text style={styles.continueText}>
-                  {isSendingOtp ? "Sending OTP..." : "Create Account"}
+                  {isCreatingAccount ? "Creating account..." : "Create Account"}
                 </Text>
               </TouchableOpacity>
 

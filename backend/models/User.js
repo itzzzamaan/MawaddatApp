@@ -4,7 +4,14 @@ const Schema = mongoose.Schema;
 const UserSchema = new Schema({
   name: String,
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+  password: {
+    type: String,
+    required: function passwordRequired() {
+      return !this.googleId && !this.firebaseUid;
+    },
+  },
+  firebaseUid: { type: String, unique: true, sparse: true },
+  googleId: { type: String, unique: true, sparse: true },
   mobile: String,
   address: String,
   imageUri: String,

@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,13 +16,20 @@ import {
 } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "@/utils/secureStorage";
+import {
+  completeFirebaseSignIn,
+  getFirebaseAuthApi,
+  getFirebaseAuthErrorMessage,
+} from "../utils/firebaseAuth";
 import { getApiBase } from "../utils/api";
+import GoogleAuthButton from "../components/GoogleAuthButton";
 
 const SignIn = () => {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -52,9 +60,9 @@ const SignIn = () => {
     }
 
     try {
-      const base = getApiBase();
+      setIsSigningIn(true);
 
-      const adminResponse = await fetch(base + "/api/auth/login", {
+      const adminResponse = await fetch(getApiBase() + "/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: normalizedEmail, password }),
@@ -73,48 +81,29 @@ const SignIn = () => {
         return;
       }
 
-      const userResponse = await fetch(base + "/api/auth/user-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail, password }),
-      });
+      const firebaseAuth = await getFirebaseAuthApi();
+      const auth = firebaseAuth.getAuth();
+      const { user } = await firebaseAuth.signInWithEmailAndPassword(
+        auth,
+        normalizedEmail,
+        password,
+      );
 
-      const json = await userResponse.json();
-      if (!userResponse.ok) {
-        const adminMessage = await adminResponse.text();
-        let adminError = "Invalid email or password";
-        try {
-          const parsedAdminError = JSON.parse(adminMessage);
-          adminError = parsedAdminError.message || adminError;
-        } catch (_error) {
-          adminError = adminMessage || adminError;
-        }
-
-        setError(json.message || adminError || `Login failed (${userResponse.status})`);
+      if (!user.emailVerified) {
+        router.replace({
+          pathname: "/Otp",
+          params: { email: user.email || normalizedEmail },
+        });
         return;
       }
 
-      const user = {
-        id: json.user?.id || null,
-        name: json.user?.name || "",
-        fullName: json.user?.name || "",
-        email: json.user?.email || normalizedEmail,
-        imageUri:
-          json.user?.imageUri ||
-          "https://www.iconpacks.net/icons/2/free-user-icon-3296-thumb.png",
-      };
-
-      await SecureStore.deleteItemAsync("admin_token");
-      await SecureStore.deleteItemAsync("admin_user");
-      await SecureStore.setItemAsync("user_token", json.token);
-      await SecureStore.setItemAsync("user_account", JSON.stringify(user));
-      await SecureStore.setItemAsync("user_profile", JSON.stringify(user));
+      await completeFirebaseSignIn(user);
       setError("");
       router.replace("/Splash-carousel");
-      return;
     } catch (err) {
-      setError("Network error: " + (err.message || String(err)));
-      return;
+      setError(getFirebaseAuthErrorMessage(err));
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
@@ -156,6 +145,8 @@ const SignIn = () => {
               />
             </View>
 
+            <GoogleAuthButton />
+
             <TouchableOpacity
               style={styles.forgotPasswordButton}
               onPress={() => router.push("/Forgot-password")}
@@ -169,11 +160,16 @@ const SignIn = () => {
 
           <View style={styles.footer}>
             <TouchableOpacity
-              style={styles.continueBtn}
+              style={[styles.continueBtn, isSigningIn && styles.disabledBtn]}
               activeOpacity={0.8}
               onPress={handleContinue}
+              disabled={isSigningIn}
             >
-              <Text style={styles.continueText}>Continue</Text>
+              {isSigningIn ? (
+                <ActivityIndicator color={Colors.light.background} />
+              ) : (
+                <Text style={styles.continueText}>Continue</Text>
+              )}
             </TouchableOpacity>
 
             <View style={styles.signup}>
@@ -267,6 +263,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
+  },
+
+  disabledBtn: {
+    opacity: 0.75,
   },
   continueText: {
     textAlign: "center",

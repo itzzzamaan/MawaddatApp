@@ -7,6 +7,10 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const { Buffer } = require('node:buffer');
+const { OAuth2Client } = require('google-auth-library');
+const firebaseAuth = require('firebase-admin/auth');
+const firebaseAdmin = require('../firebaseAdmin');
+const googleOAuthClient = new OAuth2Client();
 
 const pendingOtps = new Map();
 const pendingPasswordResets = new Map();
@@ -338,6 +342,10 @@ router.post('/user-login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    if (!user.password) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -356,6 +364,234 @@ router.post('/user-login', async (req, res) => {
   } catch (err) {
     console.error('User login error:', err);
     return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.post('/google', async (req, res) => {
+  const audience =
+    process.env.GOOGLE_WEB_CLIENT_ID ||
+    '929703402001-ntnpeoe05rnmdmie89qtq1dojq3sdlsc.apps.googleusercontent.com';
+  const idToken = req.body?.idToken;
+
+  if (!audience) {
+    return res.status(503).json({
+      message: 'Google sign-in is not configured on the backend.',
+    });
+  }
+  if (typeof idToken !== 'string' || idToken.length === 0 || idToken.length > 10000) {
+    return res.status(400).json({ message: 'A valid Google ID token is required.' });
+  }
+
+  let payload;
+  try {
+    const ticket = await googleOAuthClient.verifyIdToken({
+      idToken,
+      audience,
+    });
+    payload = ticket.getPayload();
+  } catch (error) {
+    const code = error.code || error.name || 'UnknownError';
+    console.error('Google ID token verification failed:', code);
+    const unavailableCodes = new Set([
+      'ECONNRESET',
+      'ETIMEDOUT',
+      'ENOTFOUND',
+      'EAI_AGAIN',
+    ]);
+    return res.status(unavailableCodes.has(code) ? 503 : 401).json({
+      message: unavailableCodes.has(code)
+        ? 'Google sign-in verification is temporarily unavailable.'
+        : 'Google sign-in token is invalid or expired.',
+    });
+  }
+
+  if (
+    !payload?.sub ||
+    !payload.email ||
+    payload.email_verified !== true
+  ) {
+    return res.status(401).json({
+      message: 'Google must verify your email before you can sign in.',
+    });
+  }
+
+  try {
+    const normalizedEmail = normalizeEmail(payload.email);
+    let user = await User.findOne({ googleId: payload.sub });
+
+    if (user && user.email !== normalizedEmail) {
+      const emailOwner = await User.findOne({ email: normalizedEmail });
+      if (emailOwner && String(emailOwner._id) !== String(user._id)) {
+        return res.status(409).json({
+          message: 'This Google account email is already associated with another account.',
+        });
+      }
+      user.email = normalizedEmail;
+    }
+
+    if (!user) {
+      user = await User.findOne({ email: normalizedEmail });
+      if (user?.googleId && user.googleId !== payload.sub) {
+        return res.status(409).json({
+          message: 'This email is already linked to a different Google account.',
+        });
+      }
+    }
+
+    if (!user) {
+      user = new User({
+        name: String(payload.name || payload.given_name || normalizedEmail.split('@')[0]).trim(),
+        email: normalizedEmail,
+        googleId: payload.sub,
+        imageUri: payload.picture,
+      });
+    } else {
+      user.googleId = payload.sub;
+      if (!user.name && payload.name) user.name = payload.name;
+      if (!user.imageUri && payload.picture) user.imageUri = payload.picture;
+    }
+
+    await user.save();
+
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: 'user' },
+      process.env.JWT_SECRET || 'change_this_secret',
+      { expiresIn: '7d' },
+    );
+
+    return res.status(200).json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        imageUri:
+          user.imageUri ||
+          'https://www.iconpacks.net/icons/2/free-user-icon-3296-thumb.png',
+      },
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: 'An account already exists for this Google identity. Please try again.',
+      });
+    }
+
+    console.error('Google user sign-in failed:', error.name || 'UnknownError');
+    return res.status(500).json({ message: 'Unable to sign in with Google right now.' });
+  }
+});
+
+router.post('/firebase', async (req, res) => {
+  const idToken = req.body?.idToken;
+  if (typeof idToken !== 'string' || idToken.length === 0 || idToken.length > 10000) {
+    return res.status(400).json({ message: 'A valid Firebase ID token is required.' });
+  }
+
+  let decodedToken;
+  try {
+    const app = firebaseAdmin.getFirebaseAdminApp();
+    decodedToken = await firebaseAuth.getAuth(app).verifyIdToken(idToken, true);
+  } catch (error) {
+    const code = error.code || error.name || 'UnknownError';
+    console.error('Firebase ID token verification failed:', code);
+    const configurationErrors = new Set([
+      'FIREBASE_ADMIN_NOT_CONFIGURED',
+      'FIREBASE_ADMIN_INVALID_CONFIGURATION',
+      'app/invalid-credential',
+      'app/invalid-credential-value',
+    ]);
+    return res.status(configurationErrors.has(code) ? 503 : 401).json({
+      message: configurationErrors.has(code)
+        ? 'Firebase sign-in is not configured on the backend.'
+        : 'Firebase sign-in token is invalid or expired.',
+    });
+  }
+
+  if (
+    !decodedToken?.uid ||
+    !decodedToken.email ||
+    decodedToken.email_verified !== true
+  ) {
+    return res.status(401).json({
+      message: 'Verify your email address before signing in to Mawaddat.',
+    });
+  }
+
+  try {
+    const firebaseUid = String(decodedToken.uid);
+    const normalizedEmail = normalizeEmail(decodedToken.email);
+    const profileName =
+      String(decodedToken.name || req.body?.name || '').trim().slice(0, 100) ||
+      normalizedEmail.split('@')[0];
+    const profileImage =
+      decodedToken.picture ||
+      (typeof req.body?.imageUri === 'string' &&
+      /^https:\/\//i.test(req.body.imageUri)
+        ? req.body.imageUri
+        : undefined);
+    let user = await User.findOne({ firebaseUid });
+
+    if (user && user.email !== normalizedEmail) {
+      const emailOwner = await User.findOne({ email: normalizedEmail });
+      if (emailOwner && String(emailOwner._id) !== String(user._id)) {
+        return res.status(409).json({
+          message: 'This email is already associated with another Mawaddat account.',
+        });
+      }
+      user.email = normalizedEmail;
+    }
+
+    if (!user) {
+      user = await User.findOne({ email: normalizedEmail });
+      if (user?.firebaseUid && user.firebaseUid !== firebaseUid) {
+        return res.status(409).json({
+          message: 'This email is already associated with another Firebase account.',
+        });
+      }
+    }
+
+    if (!user) {
+      user = new User({
+        name: profileName,
+        email: normalizedEmail,
+        firebaseUid,
+        imageUri: profileImage,
+      });
+    } else {
+      user.firebaseUid = firebaseUid;
+      if (!user.name) user.name = profileName;
+      if (!user.imageUri && profileImage) user.imageUri = profileImage;
+    }
+
+    await user.save();
+
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: 'user' },
+      process.env.JWT_SECRET || 'change_this_secret',
+      { expiresIn: '7d' },
+    );
+
+    return res.status(200).json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        imageUri:
+          user.imageUri ||
+          'https://www.iconpacks.net/icons/2/free-user-icon-3296-thumb.png',
+      },
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: 'This Firebase account is already linked to a Mawaddat user.',
+      });
+    }
+
+    console.error('Firebase user sign-in failed:', error.name || 'UnknownError');
+    return res.status(500).json({ message: 'Unable to sign in with Firebase right now.' });
   }
 });
 

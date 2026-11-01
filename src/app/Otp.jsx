@@ -1,365 +1,255 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { createRef, useEffect, useMemo, useState } from "react";
-import * as SecureStore from "@/utils/secureStorage";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
-  Dimensions,
+  ActivityIndicator,
   KeyboardAvoidingView,
-  PixelRatio,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  heightPercentageToDP,
-  widthPercentageToDP as wp,
-} from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../constants/theme";
-import { getApiBase } from "../utils/api";
+import * as SecureStore from "@/utils/secureStorage";
+import {
+  completeFirebaseSignIn,
+  getFirebaseAuthApi,
+  getFirebaseAuthErrorMessage,
+} from "../utils/firebaseAuth";
 
-const { width } = Dimensions.get("window");
-const TEXT_SCALE = 0.87;
-
-const scale = (size) => {
-  const factor = width / 300;
-  return Math.round(PixelRatio.roundToNearestPixel(size * factor));
-};
-
-export default function VerifyOtp() {
+export default function VerifyEmail() {
   const router = useRouter();
-  const [code, setCode] = useState(["", "", "", "", "", ""]);
-  const [timer, setTimer] = useState(60);
-  const [contactLabel, setContactLabel] = useState(null);
-  const [pending, setPending] = useState(null);
-  const [error, setError] = useState("");
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [isResending, setIsResending] = useState(false);
-
-  const inputs = useMemo(
-    () => Array.from({ length: 6 }, () => createRef()),
-    [],
-  );
-  const canResend = timer === 0;
+  const { email: routeEmail, mailError: routeMailError } = useLocalSearchParams();
+  const email = Array.isArray(routeEmail) ? routeEmail[0] : routeEmail || "";
+  const mailError = Array.isArray(routeMailError)
+    ? routeMailError[0]
+    : routeMailError || "";
+  const [error, setError] = useState(mailError);
+  const [message, setMessage] = useState("");
+  const [busyAction, setBusyAction] = useState("");
 
   useEffect(() => {
-    inputs[0].current?.focus();
-    const loadPending = async () => {
-      const p = await SecureStore.getItemAsync("pending_signup");
-      if (p) {
-        const obj = JSON.parse(p);
-        setPending(obj);
-        setContactLabel(obj.email || null);
-      }
-    };
-    loadPending();
-  }, [inputs]);
-
-  useEffect(() => {
-    if (timer === 0) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setTimer((prev) => prev - 1);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [timer]);
-
-  const handleChange = (text, index) => {
-    if (/^\d$/.test(text) || text === "") {
-      const newCode = [...code];
-      newCode[index] = text;
-      setCode(newCode);
-      setError("");
-
-      if (text && index < inputs.length - 1) {
-        inputs[index + 1].current?.focus();
-      }
-    }
-  };
-
-  const handleVerify = async () => {
-    const entered = code.join("");
-
-    if (entered.length !== 6) {
-      setError("Please enter the 6-digit OTP");
-      return;
-    }
-
-    if (!pending?.email) {
-      setError("Signup session expired. Please sign up again.");
-      return;
-    }
-
-    try {
-      setIsVerifying(true);
-      setError("");
-
-      const response = await fetch(
-        `${getApiBase()}/api/auth/verify-signup-otp`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: pending.email, otp: entered }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Invalid OTP");
-      }
-
-      const signupResponse = await fetch(`${getApiBase()}/api/auth/signup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: pending.name,
-          email: pending.email,
-          password: pending.password,
-        }),
-      });
-
-      const signupData = await signupResponse.json();
-      if (!signupResponse.ok) {
-        throw new Error(signupData?.message || "Signup failed");
-      }
-
-      const user = {
-        name: pending.name,
-        fullName: pending.name,
-        email: pending.email,
-        imageUri:
-          signupData.user?.imageUri ||
-          "https://www.iconpacks.net/icons/2/free-user-icon-3296-thumb.png",
-      };
-
-      await SecureStore.setItemAsync("user_account", JSON.stringify(user));
-      await SecureStore.setItemAsync("user_profile", JSON.stringify(user));
-      if (signupData.token) {
-        await SecureStore.setItemAsync("user_token", signupData.token);
-      }
+    const clearLegacySignupData = async () => {
       await SecureStore.deleteItemAsync("pending_signup");
+    };
+    clearLegacySignupData();
+  }, []);
 
-      router.replace("/Splash-carousel");
-    } catch (err) {
-      setError(err.message || "Unable to verify OTP. Please try again.");
-    } finally {
-      setIsVerifying(false);
+  const getCurrentUser = async () => {
+    const firebaseAuth = await getFirebaseAuthApi();
+    const auth = firebaseAuth.getAuth();
+    const user = auth.currentUser;
+
+    if (!user || user.email?.toLowerCase() !== email.toLowerCase()) {
+      throw new Error(
+        "Your signup session expired. Sign in with this email to continue verification.",
+      );
     }
+
+    return { firebaseAuth, user };
   };
 
-  const handleResend = async () => {
-    if (!pending?.email) return;
+  const checkVerification = async () => {
+    setBusyAction("check");
+    setError("");
+    setMessage("");
 
     try {
-      setIsResending(true);
-      setError("");
+      const { firebaseAuth, user } = await getCurrentUser();
+      await firebaseAuth.reload(user);
 
-      const response = await fetch(`${getApiBase()}/api/auth/send-signup-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: pending.name,
-          email: pending.email,
-          password: pending.password,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.message || "Failed to resend OTP");
+      if (!user.emailVerified) {
+        setError("Your email is not verified yet. Open the link in your email, then try again.");
+        return;
       }
 
-      const updated = {
-        ...pending,
-        otp: data.otp || null,
-        createdAt: Date.now(),
-      };
-      await SecureStore.setItemAsync("pending_signup", JSON.stringify(updated));
-      setPending(updated);
-      setTimer(60);
-      setCode(["", "", "", "", "", ""]);
-      inputs[0].current?.focus();
-    } catch (err) {
-      setError(err.message || "Could not resend OTP");
+      await completeFirebaseSignIn(user);
+      router.replace("/Splash-carousel");
+    } catch (verificationError) {
+      setError(getFirebaseAuthErrorMessage(verificationError));
     } finally {
-      setIsResending(false);
+      setBusyAction("");
     }
   };
+
+  const resendVerification = async () => {
+    setBusyAction("resend");
+    setError("");
+    setMessage("");
+
+    try {
+      const { firebaseAuth, user } = await getCurrentUser();
+      await firebaseAuth.sendEmailVerification(user);
+      setMessage(`A new verification link was sent to ${email}.`);
+    } catch (verificationError) {
+      setError(getFirebaseAuthErrorMessage(verificationError));
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const button = (label, action, onPress, secondary = false) => (
+    <TouchableOpacity
+      accessibilityRole="button"
+      activeOpacity={0.8}
+      disabled={Boolean(busyAction)}
+      onPress={onPress}
+      style={[
+        secondary ? styles.secondaryButton : styles.primaryButton,
+        busyAction && styles.disabledButton,
+      ]}
+    >
+      {busyAction === action ? (
+        <ActivityIndicator color={secondary ? Colors.light.text : Colors.light.background} />
+      ) : (
+        <Text style={secondary ? styles.secondaryButtonText : styles.primaryButtonText}>
+          {label}
+        </Text>
+      )}
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={24} color="#333" />
-            </TouchableOpacity>
-            <Text style={styles.headerText}>Verify OTP</Text>
-          </View>
-
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>Enter verification code</Text>
-            <Text style={styles.subtitle}>
-              We have sent a 6-digit code to{" "}
-              {contactLabel ? "your email" : "your phone"}
-            </Text>
-          </View>
-
-          <View style={styles.otpContainer}>
-            {code.map((digit, idx) => (
-              <TextInput
-                key={idx}
-                ref={inputs[idx]}
-                style={styles.otpBox}
-                keyboardType="number-pad"
-                maxLength={1}
-                value={digit}
-                onChangeText={(text) => handleChange(text, idx)}
-              />
-            ))}
-          </View>
-
-          <View style={styles.wrongContainer}>
-            <Text style={styles.wrongText}>{contactLabel || "+91 9XXXXXXXXX"}</Text>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Text style={styles.wrongLink}>
-                {contactLabel ? "Wrong email?" : "Wrong number?"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <View style={{ flex: 1 }} />
-
+        <View style={styles.header}>
           <TouchableOpacity
-            style={[styles.verifyBtn, isVerifying && styles.disabledBtn]}
-            onPress={handleVerify}
-            disabled={isVerifying}
+            onPress={() => router.replace("/signin")}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Back to sign in"
           >
-            <Text style={styles.verifyText}>
-              {isVerifying ? "Verifying..." : "Verify"}
-            </Text>
+            <Ionicons name="arrow-back" size={22} color={Colors.light.text} />
           </TouchableOpacity>
+          <Text style={styles.headerTitle}>Verify your email</Text>
+        </View>
 
-          <View style={styles.resendContainer}>
-            {!canResend ? (
-              <Text style={styles.resendText}>Resend OTP in {timer}s</Text>
-            ) : (
-              <TouchableOpacity onPress={handleResend} disabled={isResending}>
-                <Text style={styles.resendLink}>
-                  {isResending ? "Sending..." : "Resend OTP"}
-                </Text>
-              </TouchableOpacity>
-            )}
+        <View style={styles.content}>
+          <View style={styles.iconCircle}>
+            <Ionicons name="mail-outline" size={28} color={Colors.light.text} />
           </View>
-        </ScrollView>
+          <Text style={styles.title}>Check your inbox</Text>
+          <Text style={styles.description}>
+            We sent a verification link to{"\n"}
+            <Text style={styles.email}>{email}</Text>
+            {"\n\n"}Open the link, return to Mawaddat, then confirm below.
+          </Text>
+
+          {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+          {message ? <Text style={styles.message}>{message}</Text> : null}
+
+          {button("I’ve verified my email", "check", checkVerification)}
+          {button(
+            "Resend verification email",
+            "resend",
+            resendVerification,
+            true,
+          )}
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: Colors.light.background,
   },
+  flex: { flex: 1 },
   header: {
+    minHeight: 54,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: heightPercentageToDP(2),
-    paddingTop: heightPercentageToDP(2),
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E8E0D6",
   },
-  headerText: {
-    fontSize: wp("4.5%"),
-    fontWeight: "600",
-    marginLeft: 12,
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  titleContainer: {
-    paddingHorizontal: 24,
-    marginTop: 24,
+  headerTitle: {
+    marginLeft: 8,
+    color: Colors.light.text,
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  content: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 22,
+  },
+  iconCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.light.backgroundSelected,
+    marginBottom: 20,
   },
   title: {
-    fontSize: wp(7),
-    fontWeight: "700",
     color: Colors.light.text,
+    fontSize: 26,
+    fontWeight: "800",
   },
-  subtitle: {
-    fontSize: wp(3.4),
+  description: {
     color: Colors.light.textSecondary,
-    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
+    marginBottom: 26,
   },
-  otpContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 32,
-    paddingHorizontal: 20,
-  },
-  otpBox: {
-    width: wp(12),
-    height: wp(12),
-    borderWidth: 1,
-    borderColor: Colors.light.textSecondary,
-    borderRadius: 8,
-    textAlign: "center",
-    fontSize: scale(18) * TEXT_SCALE,
-    backgroundColor: Colors.light.backgroundElement,
-  },
-  wrongContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    marginTop: 20,
-  },
-  wrongText: {
-    fontSize: scale(13) * TEXT_SCALE,
-    color: Colors.light.textSecondary,
-  },
-  wrongLink: {
-    fontSize: scale(13) * TEXT_SCALE,
-    color: Colors.light.textSecondary,
-    marginLeft: 6,
-  },
-  verifyBtn: {
-    backgroundColor: Colors.light.text,
-    borderRadius: 12,
-    paddingVertical: 16,
-    marginHorizontal: 20,
-  },
-  verifyText: {
-    color: Colors.light.background,
-    fontSize: wp("4%"),
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  resendContainer: {
-    alignItems: "center",
-    marginVertical: 12,
-  },
-  resendText: {
-    color: Colors.light.textSecondary,
-  },
-  resendLink: {
-    color: Colors.light.textSecondary,
-    fontWeight: "600",
+  email: {
+    color: Colors.light.text,
+    fontWeight: "700",
   },
   error: {
-    color: "#D32F2F",
-    fontSize: wp("3.2%"),
-    marginTop: 16,
-    marginHorizontal: 20,
+    color: "#B42318",
+    fontSize: 13,
+    marginBottom: 12,
   },
-  disabledBtn: {
-    opacity: 0.7,
+  message: {
+    color: "#18794E",
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    backgroundColor: Colors.light.text,
+    marginTop: 6,
+  },
+  secondaryButton: {
+    minHeight: 48,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#D9D0C6",
+    marginTop: 10,
+  },
+  disabledButton: { opacity: 0.65 },
+  primaryButtonText: {
+    color: Colors.light.background,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  secondaryButtonText: {
+    color: Colors.light.text,
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

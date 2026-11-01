@@ -30,8 +30,15 @@ module.exports = ({ config }) => {
     androidGoogleServices && iosGoogleServices,
   );
   const firebaseIosConfigured = Boolean(iosGoogleServices);
+  const googleWebClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+    "929703402001-ntnpeoe05rnmdmie89qtq1dojq3sdlsc.apps.googleusercontent.com";
+  const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || "";
+  const googleIosUrlScheme =
+    process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME || "";
   const firebasePlugins = new Set([
     "@react-native-firebase/app",
+    "@react-native-firebase/auth",
     "@react-native-firebase/messaging",
   ]);
 
@@ -44,7 +51,26 @@ module.exports = ({ config }) => {
     firebaseConfigured,
     firebaseAndroidConfigured: Boolean(androidGoogleServices),
     firebaseIosConfigured,
+    googleWebClientId,
+    googleIosClientId,
   };
+
+  const googleSignInOptions = {};
+  if (googleIosUrlScheme) {
+    googleSignInOptions.iosUrlScheme = googleIosUrlScheme;
+  }
+  if (androidGoogleServices) {
+    googleSignInOptions.androidGoogleServicesFile = toExpoPath(
+      androidGoogleServices,
+    );
+  }
+  if (iosGoogleServices) {
+    googleSignInOptions.iosGoogleServicesFile = toExpoPath(iosGoogleServices);
+  }
+  expoConfig.plugins.push([
+    "react-native-nitro-google-signin",
+    googleSignInOptions,
+  ]);
 
   if (androidGoogleServices) {
     expoConfig.android = {
@@ -77,6 +103,7 @@ module.exports = ({ config }) => {
     };
     expoConfig.plugins.push(
       "@react-native-firebase/app",
+      "@react-native-firebase/auth",
       "@react-native-firebase/messaging",
     );
     expoConfig.plugins = expoConfig.plugins.map((plugin) => {

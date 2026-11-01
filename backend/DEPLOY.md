@@ -10,30 +10,12 @@ hosting provider's service settings, then redeploy/restart the service.
 
 ### Render
 
-Render Free web services block outbound traffic on SMTP ports `25`, `465`, and
-`587`. Correct Gmail credentials therefore cannot deliver mail from a Free
-service using SMTP.
-
-To keep using Gmail SMTP, use a Render service plan that permits outbound SMTP
-and add the following in the backend web service's **Environment** settings:
-
-- `SMTP_HOST=smtp.gmail.com`
-- `SMTP_PORT=587`
-- `SMTP_USER`: the Gmail account used to send OTP emails
-- `SMTP_PASS`: a Google App Password for that account (not its normal password)
-- `SMTP_FROM`: the same Gmail address
-
-Alternatively, on Render Free, configure an HTTPS email provider. The backend
-supports Resend with these environment variables:
-
-- `RESEND_API_KEY`: a Resend API key
-- `SMTP_FROM`: a sender address verified with Resend (typically on a domain you
-  control; a Gmail address cannot be used as an unverified sender)
-
-Use the backend's environment settings for other secrets such as `MONGO_URI`
-and `JWT_SECRET` as well. If the Render service cannot connect to Gmail SMTP,
-use the HTTPS provider option instead. Do not put email credentials in the
-mobile app or commit them to the repository. Redeploy after changing settings.
+Set `MONGO_URI`, `JWT_SECRET`, `FIREBASE_PROJECT_ID`, and
+`FIREBASE_SERVICE_ACCOUNT_JSON` in the backend web service's **Environment**
+settings. Put the Firebase service-account JSON in the host's secure environment
+setting, not in the repository. The mobile app uses Firebase Authentication for
+email verification and password-reset links, so the current app does not depend
+on backend SMTP credentials.
 
 ### Deploying the backend to Vercel
 
@@ -43,14 +25,20 @@ settings for every environment you deploy:
 
 - `MONGO_URI`: the MongoDB Atlas connection string
 - `JWT_SECRET`: a long, random signing secret
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` if signup
-  and password-reset verification emails should be delivered
+- `FIREBASE_PROJECT_ID`: the Firebase project ID used by the app
+- `FIREBASE_SERVICE_ACCOUNT_JSON`: Firebase Admin service-account JSON, stored
+  as a secure environment variable
 
-After adding or changing `MONGO_URI`, redeploy the backend so the deployment
-receives the setting. In MongoDB Atlas, verify the database user/password and
-that the cluster's Network Access rules permit connections from the Vercel
-deployment. Prefer Vercel static outbound IPs or another restricted allowlist
-over opening the database to all IP addresses.
+The alternative `GOOGLE_APPLICATION_CREDENTIALS` must point to a service
+account file accessible to the deployed process; use the JSON environment
+variable for a typical Render or Vercel deployment. Redeploy after changing
+these settings. In MongoDB Atlas, verify the database user/password and that the
+cluster's Network Access rules permit connections from the deployment. Prefer
+restricted allowlists over opening the database to all IP addresses.
+
+The previous SMTP and Resend OTP endpoints are retained for older app builds.
+They are not called by the current mobile app; configure the corresponding mail
+provider settings only if those legacy endpoints still need to serve clients.
 
 The backend connects to MongoDB when an API request arrives. Confirm deployment
 and database connectivity by requesting `/api/health`; a healthy response

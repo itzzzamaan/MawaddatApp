@@ -33,8 +33,8 @@ its path). Its Android package name must match `expo.android.package` in
 Firebase Android BoM for Android; generated native files should not be edited
 directly. iOS Firebase uses the bundle ID `Mawaddat.App.Ios` and is enabled
 when `GoogleService-Info.plist` is present in the project root (or
-`GOOGLE_SERVICE_INFO_PLIST` points to it). The React Native Firebase app and
-messaging config plugins configure Firebase initialization, Swift Package
+`GOOGLE_SERVICE_INFO_PLIST` points to it). The React Native Firebase app, auth,
+and messaging config plugins configure Firebase initialization, Swift Package
 Manager resolution, and dynamic framework linkage during iOS prebuild.
 Remote notifications require a development or production build; Expo Go does not
 include the required native Firebase modules.
@@ -43,10 +43,31 @@ EAS before testing remote notifications on physical devices. After adding the
 files and credentials, rebuild the native app; changing Expo configuration does
 not update an already-installed development build.
 
+Email/password and Google authentication use Firebase Authentication. New
+email/password accounts receive a Firebase verification link; after verification,
+the app exchanges a Firebase ID token with the backend, which creates or links
+the MongoDB user and issues the app session token. Password reset links are sent
+by Firebase rather than the backend SMTP service.
+
+Google sign-in uses Android Credential Manager through
+`react-native-nitro-google-signin`. Both Google Credential Manager and Firebase
+Auth are native modules and require a development or production build; neither
+is included in Expo Go or older installed builds. The Web OAuth client ID from
+the Google sign-in configuration is used by default; override it with
+`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` for app builds and `GOOGLE_WEB_CLIENT_ID`
+for the backend if needed. Register the Android app (`Mawaddat.App`) with both
+the development/debug and release signing certificate SHA-1 fingerprints in
+Google Cloud or Firebase, then use the resulting updated `google-services.json`.
+Build and install the Android development app with
+`npx eas-cli@latest build --profile development --platform android`, then start
+Metro with `npx expo start --dev-client`.
+
 Configure the backend with a Firebase Admin service account using either
 `GOOGLE_APPLICATION_CREDENTIALS` (a path available to the backend process) or
 `FIREBASE_SERVICE_ACCOUNT_JSON` (the JSON credential supplied through a secure
-environment variable). Do not commit Firebase service-account credentials.
+environment variable), and set `FIREBASE_PROJECT_ID` to the Firebase project
+ID. The backend verifies Firebase ID tokens at `/api/auth/firebase` before
+creating MongoDB user records. Do not commit Firebase service-account credentials.
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
