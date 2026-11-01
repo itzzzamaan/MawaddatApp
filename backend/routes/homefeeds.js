@@ -5,6 +5,7 @@ const { notifyPoetFollowersAboutPost } = require("../notificationService");
 const { saveImageAsset } = require("../database");
 const auth = require("../middleware/auth");
 const adminOnly = require("../middleware/adminOnly");
+const { compareByDisplayOrder, setDisplayOrder } = require("../utils/displayOrder");
 const multer = require("multer");
 const path = require("path");
 
@@ -145,6 +146,7 @@ const serializeHomeFeed = (item, req) => {
 
 router.get("/", async (req, res) => {
   const items = await HomeFeed.find().sort({ createdAt: -1 });
+  items.sort(compareByDisplayOrder);
   const serialized = items.map((item) => serializeHomeFeed(item, req));
   res.json(
     serialized.map((item) => ({
@@ -167,6 +169,7 @@ router.post(
   async (req, res) => {
     try {
       let body = normalizeHomeFeedBody(req.body || {});
+      delete body.displayOrder;
       body = await applyStoredImageFields(body, req.files || {});
 
       if (!body.image && !body.avatar) {
@@ -192,6 +195,23 @@ router.post(
   },
 );
 
+router.patch("/:id/order", auth, adminOnly, async (req, res) => {
+  try {
+    const result = await setDisplayOrder(
+      HomeFeed,
+      req.params.id,
+      req.body?.order,
+      50,
+    );
+    if (result.notFound) return res.status(404).json({ message: "Post not found." });
+    if (result.error) return res.status(400).json({ message: result.error });
+    return res.json({ displayOrder: result.displayOrder });
+  } catch (error) {
+    console.error("Update home feed order failed:", error.name || "UnknownError");
+    return res.status(500).json({ message: "Unable to update post order." });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   const item = await HomeFeed.findById(req.params.id);
   if (!item) return res.status(404).json({ message: "Home feed not found" });
@@ -210,6 +230,7 @@ router.put(
   async (req, res) => {
     try {
       let body = normalizeHomeFeedBody(req.body || {});
+      delete body.displayOrder;
       body = await applyStoredImageFields(body, req.files || {});
 
       if (!body.image && !body.avatar) {
@@ -238,8 +259,15 @@ router.put(
 );
 
 router.delete("/:id", auth, async (req, res) => {
-  await HomeFeed.findByIdAndDelete(req.params.id);
-  res.json({ success: true });
+  try {
+    const result = await setDisplayOrder(HomeFeed, req.params.id, null, 50);
+    if (result.notFound) return res.status(404).json({ message: "Post not found." });
+    await HomeFeed.findByIdAndDelete(req.params.id);
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Delete home feed failed:", error.name || "UnknownError");
+    return res.status(500).json({ message: "Unable to delete post." });
+  }
 });
 
 router.post("/:id/comments", auth, async (req, res) => {

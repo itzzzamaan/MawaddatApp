@@ -1,10 +1,10 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Image, ScrollView, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as SecureStore from "@/utils/secureStorage";
 import { AdminContext } from './_layout';
 import { Colors } from '../../constants/theme';
-import { getApiBase, normalizeImageUrl, uploadImageToApi } from '../../utils/api';
+import { getApiBase, normalizeImageUrl, parseApiResponse, uploadImageToApi } from '../../utils/api';
 
 const POET_CATEGORIES = ['Poet', 'Reciter', 'Association', 'Scholar'];
 
@@ -14,6 +14,7 @@ const getAdminToken = async (currentToken) => {
 };
 
 const API = `${getApiBase()}/api`;
+const MAX_FEATURED_POETS = 20;
 
 const resolveImageUrl = (value) => {
   if (!value) return null;
@@ -38,14 +39,35 @@ export default function AdminPoets() {
   const [imageBase64, setImageBase64] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [orderDrafts, setOrderDrafts] = useState({});
 
-  useEffect(() => { fetchList(); }, []);
-
-  const fetchList = async () => {
+  const fetchList = useCallback(async () => {
     const res = await fetch(API + '/poets');
     const json = await res.json();
-    setItems(json || []);
-  };
+    if (!res.ok) throw new Error(json.message || 'Failed to load poets.');
+    const list = Array.isArray(json) ? json : [];
+    setItems(list);
+    setOrderDrafts(Object.fromEntries(
+      list.map((item) => [String(item._id || item.id), item.displayOrder ? String(item.displayOrder) : '']),
+    ));
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchList().catch((error) => console.error('Failed to load poets:', error));
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchList]);
+
+  const filteredItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return items;
+    return items.filter((item) =>
+      [item.name, item.category, item.location, item.famousFor, item.description, item.bio]
+        .some((value) => String(value || '').toLowerCase().includes(query)),
+    );
+  }, [items, searchQuery]);
 
   const resetForm = () => {
     setForm(emptyPoet);
@@ -197,6 +219,40 @@ export default function AdminPoets() {
     fetchList();
   };
 
+  const saveDisplayOrder = async (item) => {
+    const authToken = await getAdminToken(token);
+    if (!authToken) {
+      alert('Not authenticated. Please login as admin.');
+      return;
+    }
+
+    const id = String(item._id || item.id);
+    const draft = (orderDrafts[id] || '').trim();
+    if (draft && (!/^\d+$/.test(draft) || Number(draft) > MAX_FEATURED_POETS)) {
+      alert('Enter a whole number from 1 to 20, or leave it blank for automatic order.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API}/poets/${id}/order`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ order: draft ? Number(draft) : null }),
+      });
+      const result = await parseApiResponse(res);
+      if (!res.ok) {
+        alert(result.message || 'Unable to update poet order.');
+        return;
+      }
+      await fetchList();
+    } catch (error) {
+      alert(error.message || 'Unable to update poet order.');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Manage Poets</Text>
@@ -253,11 +309,23 @@ export default function AdminPoets() {
           <Text style={styles.listTitle}>Poet list</Text>
           <Text style={styles.listCount}>{items.length} items</Text>
         </View>
+        <Text style={styles.orderHelp}>
+          {`Assign positions 1–${MAX_FEATURED_POETS} for featured poets. Leave blank for newest-first order.`}
+        </Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search poets"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor={Colors.light.textSecondary}
+          returnKeyType="search"
+        />
 
         <FlatList
-          data={items}
+          data={filteredItems}
           keyExtractor={(item) => String(item._id || item.id)}
           scrollEnabled={false}
+          ListEmptyComponent={<Text style={styles.emptyText}>No poets match your search.</Text>}
           renderItem={({ item }) => (
             <View style={styles.row}>
               <Image source={{ uri: resolveImageUrl(item.image || item.avatar) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800' }} style={styles.rowImage} />
@@ -265,6 +333,24 @@ export default function AdminPoets() {
                 <Text style={styles.itemTitle}>{item.name}</Text>
                 <Text style={styles.itemMeta}>{item.category} • {item.years || 'N/A'}</Text>
                 <Text style={styles.itemText} numberOfLines={2}>{item.description}</Text>
+                <View style={styles.orderRow}>
+                  <Text style={styles.orderLabel}>Rank #{item.displayOrder || '—'}</Text>
+                  <TextInput
+                    style={styles.orderInput}
+                    value={orderDrafts[String(item._id || item.id)] ?? ''}
+                    onChangeText={(value) => setOrderDrafts((current) => ({
+                      ...current,
+                      [String(item._id || item.id)]: value.replace(/[^\d]/g, '').slice(0, 2),
+                    }))}
+                    placeholder="Auto"
+                    keyboardType="number-pad"
+                    maxLength={2}
+                    accessibilityLabel={`Featured position for ${item.name}`}
+                  />
+                  <TouchableOpacity onPress={() => saveDisplayOrder(item)} style={styles.orderButton}>
+                    <Text style={styles.orderButtonText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={styles.rowActions}>
                 <TouchableOpacity onPress={() => startEdit(item)} style={styles.editBtn}><Text style={styles.editText}>Edit</Text></TouchableOpacity>
@@ -304,11 +390,19 @@ const styles = StyleSheet.create({
   listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   listTitle: { fontWeight: '800', fontSize: 16, color: Colors.light.text },
   listCount: { color: Colors.light.textSecondary },
+  orderHelp: { color: Colors.light.textSecondary, marginBottom: 8, lineHeight: 18 },
+  searchInput: { borderWidth: 1, borderColor: '#E7DED0', padding: 12, borderRadius: 12, backgroundColor: '#fff', color: Colors.light.text, marginBottom: 12 },
+  emptyText: { color: Colors.light.textSecondary, paddingVertical: 16 },
   row: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: Colors.light.backgroundElement, borderRadius: 12, marginBottom: 10 },
   rowImage: { width: 72, height: 72, borderRadius: 10 },
   itemTitle: { color: Colors.light.text, fontWeight: '700', fontSize: 15 },
   itemMeta: { color: Colors.light.textSecondary, marginTop: 4 },
   itemText: { color: Colors.light.text, marginTop: 4 },
+  orderRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 },
+  orderLabel: { color: Colors.light.textSecondary, fontSize: 10 },
+  orderInput: { minWidth: 42, borderWidth: 1, borderColor: '#E7DED0', paddingVertical: 5, paddingHorizontal: 5, borderRadius: 7, color: Colors.light.text, backgroundColor: '#fff', textAlign: 'center' },
+  orderButton: { backgroundColor: Colors.light.text, paddingVertical: 7, paddingHorizontal: 8, borderRadius: 7 },
+  orderButtonText: { color: '#fff', fontWeight: '700', fontSize: 11 },
   rowActions: { marginLeft: 8 },
   editBtn: { backgroundColor: '#C49A32', padding: 8, borderRadius: 8, marginBottom: 6 },
   editText: { color: '#fff', fontWeight: '700', fontSize: 12 },

@@ -4,11 +4,28 @@ export const getApiBase = () => {
   const configuredUrl =
     process.env.EXPO_PUBLIC_API_URL ||
     process.env.API_URL ||
-    "http://192.168.133.223:4000";
+    "https://mawaddatapp.onrender.com/";
   const normalized = configuredUrl.trim().replace(/\/+$/, "");
   return /^https?:\/\//i.test(normalized)
     ? normalized
     : `https://${normalized}`;
+};
+
+export const parseApiResponse = async (response) => {
+  const body = await response.text();
+  if (!body) return {};
+
+  try {
+    return JSON.parse(body);
+  } catch {
+    if (/^\s*</.test(body)) {
+      throw new Error(
+        `Backend returned an HTML error page (HTTP ${response.status}). Deploy the latest backend changes and try again.`,
+      );
+    }
+
+    throw new Error(`Backend returned an invalid response (HTTP ${response.status}).`);
+  }
 };
 
 export const normalizeImageUrl = (value) => {

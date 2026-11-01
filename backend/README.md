@@ -46,6 +46,9 @@ API endpoints:
 - POST /api/events (auth + form-data image)
 - GET/PUT/DELETE /api/events/:id
 - Similar endpoints for /api/poets and /api/homefeeds
+- Admins can assign poet positions 1–20 and post positions 1–50 with
+  `PATCH /api/poets/:id/order` and `PATCH /api/homefeeds/:id/order`; items
+  without a position stay in newest-first order.
 - /api/carousels manages homepage hero banners; /api/promotions manages
   post-sign-in splash promotions. Promotion changes require admin authentication.
 

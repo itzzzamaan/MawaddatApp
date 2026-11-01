@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+const { Buffer } = require('node:buffer');
 
 const pendingOtps = new Map();
 const pendingPasswordResets = new Map();
@@ -13,16 +14,61 @@ const passwordResetTokens = new Map();
 
 const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
 
+const getOtpMessage = (email, otp, purpose) => {
+  const isPasswordReset = purpose === 'password-reset';
+  return {
+    to: email,
+    subject: isPasswordReset ? 'Reset your Mawaddat password' : 'Your Mawaddat signup OTP',
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
+        <h2 style="margin-bottom: 12px;">${isPasswordReset ? 'Password reset code' : 'Your verification code'}</h2>
+        <p>${isPasswordReset ? 'Use this code to reset your Mawaddat password.' : 'Use the code below to complete your signup.'}</p>
+        <div style="font-size: 32px; letter-spacing: 6px; font-weight: 700; margin: 18px 0; padding: 16px 20px; background: #f3f4f6; border-radius: 10px; display: inline-block;">
+          ${otp}
+        </div>
+        <p>This code expires in 10 minutes.</p>
+      </div>
+    `,
+  };
+};
+
+const sendOtpWithResend = async (email, otp, purpose) => {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: process.env.SMTP_FROM,
+      ...getOtpMessage(email, otp, purpose),
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    const error = new Error('Email provider rejected the OTP message.');
+    error.code = 'EMAIL_PROVIDER_REJECTED';
+    error.status = response.status;
+    throw error;
+  }
+};
+
 const getTransporter = () => {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS?.replace(/\s/g, '');
 
-  const host = SMTP_HOST || 'smtp.gmail.com';
-  const port = Number(SMTP_PORT || 587);
-  const user = SMTP_USER || 'isak36228@gmail.com';
-  const pass = SMTP_PASS;
-
-  if (!pass) {
-    return null;
+  if (!user || !pass) {
+    const error = new Error('SMTP_USER and SMTP_PASS must be configured.');
+    error.code = 'SMTP_NOT_CONFIGURED';
+    throw error;
+  }
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    const error = new Error('SMTP_PORT must be a valid port number.');
+    error.code = 'SMTP_INVALID_PORT';
+    throw error;
   }
 
   return nodemailer.createTransport({
@@ -37,32 +83,51 @@ const getTransporter = () => {
 };
 
 const sendOtpEmail = async (email, otp, purpose = 'signup') => {
-  const transporter = getTransporter();
+  if (process.env.RESEND_API_KEY) {
+    if (!process.env.SMTP_FROM) {
+      const error = new Error('SMTP_FROM must be a verified sender address when using Resend.');
+      error.code = 'EMAIL_SENDER_NOT_CONFIGURED';
+      throw error;
+    }
 
-  if (!transporter) {
-    console.log(`OTP for ${email}: ${otp}`);
-    return { devMode: true, message: 'SMTP not configured; OTP was logged to the server console.' };
+    await sendOtpWithResend(email, otp, purpose);
+    return { message: 'OTP email sent successfully.' };
   }
 
-  const isPasswordReset = purpose === 'password-reset';
-  const mailOptions = {
-    from: process.env.SMTP_FROM || process.env.SMTP_USER || 'isak36228@gmail.com',
-    to: email,
-    subject: isPasswordReset ? 'Reset your Mawaddat password' : 'Your Mawaddat signup OTP',
-    html: `
-      <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-        <h2 style="margin-bottom: 12px;">${isPasswordReset ? 'Password reset code' : 'Your verification code'}</h2>
-        <p>${isPasswordReset ? 'Use this code to reset your Mawaddat password.' : 'Use the code below to complete your signup.'}</p>
-        <div style="font-size: 32px; letter-spacing: 6px; font-weight: 700; margin: 18px 0; padding: 16px 20px; background: #f3f4f6; border-radius: 10px; display: inline-block;">
-          ${otp}
-        </div>
-        <p>This code expires in 10 minutes.</p>
-      </div>
-    `,
-  };
+  const transporter = getTransporter();
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      ...getOtpMessage(email, otp, purpose),
+    });
+    return { message: 'OTP email sent successfully.' };
+  } finally {
+    transporter.close();
+  }
+};
 
-  await transporter.sendMail(mailOptions);
-  return { devMode: false, message: 'OTP email sent successfully.' };
+const getOtpDeliveryError = (error) => {
+  const code = error.code || error.name || 'UnknownError';
+  console.error('OTP email delivery failed:', code);
+
+  if (code === 'SMTP_NOT_CONFIGURED' || code === 'SMTP_INVALID_PORT' || code === 'EMAIL_SENDER_NOT_CONFIGURED') {
+    return {
+      status: 503,
+      message: 'Email delivery is not configured correctly on the backend.',
+    };
+  }
+
+  if (code === 'ETIMEDOUT' || code === 'ESOCKET' || code === 'ECONNECTION' || code === 'ECONNREFUSED') {
+    return {
+      status: 503,
+      message: 'The backend cannot reach its SMTP server. If hosted on Render Free, use an HTTPS email provider or a plan that allows SMTP.',
+    };
+  }
+
+  return {
+    status: 502,
+    message: 'Unable to send the verification email. Check the backend email-provider settings and logs.',
+  };
 };
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
@@ -80,7 +145,7 @@ router.post('/forgot-password/send-otp', async (req, res) => {
     }
 
     const otp = generateOtp();
-    const emailResult = await sendOtpEmail(email, otp, 'password-reset');
+    await sendOtpEmail(email, otp, 'password-reset');
     pendingPasswordResets.set(email, {
       otpHash: crypto.createHash('sha256').update(otp).digest('hex'),
       createdAt: Date.now(),
@@ -89,12 +154,11 @@ router.post('/forgot-password/send-otp', async (req, res) => {
 
     return res.status(200).json({
       message: 'If an account exists for that email, a verification code has been sent.',
-      devMode: emailResult.devMode,
       otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
     });
   } catch (err) {
-    console.error('Send password reset OTP error:', err);
-    return res.status(500).json({ message: 'Unable to send a verification code right now.' });
+    const deliveryError = getOtpDeliveryError(err);
+    return res.status(deliveryError.status).json({ message: deliveryError.message });
   }
 });
 
@@ -194,18 +258,16 @@ router.post('/send-signup-otp', async (req, res) => {
     }
 
     const otp = generateOtp();
-    setPendingSignup(normalizedEmail, { name, email: normalizedEmail, password, otp, createdAt: Date.now() });
-
     const emailResult = await sendOtpEmail(normalizedEmail, otp);
+    setPendingSignup(normalizedEmail, { name, email: normalizedEmail, password, otp });
 
     return res.status(200).json({
       message: emailResult.message,
-      devMode: emailResult.devMode,
       otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
     });
   } catch (err) {
-    console.error('Send signup OTP error:', err);
-    return res.status(500).json({ message: 'Failed to send OTP' });
+    const deliveryError = getOtpDeliveryError(err);
+    return res.status(deliveryError.status).json({ message: deliveryError.message });
   }
 });
 

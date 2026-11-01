@@ -13,6 +13,7 @@ const PoetSchema = new Schema({
   image: String,
   categories: [String],
   social: Schema.Types.Mixed,
+  displayOrder: { type: Number, default: null },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Poet', PoetSchema);

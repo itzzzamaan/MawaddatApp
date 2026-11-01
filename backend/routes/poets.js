@@ -2,7 +2,9 @@ const express = require("express");
 const router = express.Router();
 const Poet = require("../models/Poet");
 const auth = require("../middleware/auth");
+const adminOnly = require("../middleware/adminOnly");
 const { saveImageAsset } = require("../database");
+const { compareByDisplayOrder, setDisplayOrder } = require("../utils/displayOrder");
 const multer = require("multer");
 const path = require("path");
 
@@ -100,6 +102,7 @@ const serializePoet = (item, req) => {
 
 router.get("/", async (req, res) => {
   const items = await Poet.find().sort({ createdAt: -1 });
+  items.sort(compareByDisplayOrder);
   res.json(items.map((item) => serializePoet(item, req)));
 });
 
@@ -124,6 +127,7 @@ router.get("/", async (req, res) => {
 router.post("/", auth, upload.single("image"), async (req, res) => {
   try {
     const body = normalizePoetBody(req.body || {});
+    delete body.displayOrder;
 
     if (req.file?.buffer) {
       const saved = await saveImageAsset(req.file.buffer, req.file.mimetype);
@@ -150,9 +154,27 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
   }
 });
 
+router.patch("/:id/order", auth, adminOnly, async (req, res) => {
+  try {
+    const result = await setDisplayOrder(
+      Poet,
+      req.params.id,
+      req.body?.order,
+      20,
+    );
+    if (result.notFound) return res.status(404).json({ message: "Poet not found." });
+    if (result.error) return res.status(400).json({ message: result.error });
+    return res.json({ displayOrder: result.displayOrder });
+  } catch (error) {
+    console.error("Update poet order failed:", error.name || "UnknownError");
+    return res.status(500).json({ message: "Unable to update poet order." });
+  }
+});
+
 router.put("/:id", auth, upload.single("image"), async (req, res) => {
   try {
     const body = normalizePoetBody(req.body || {});
+    delete body.displayOrder;
 
     if (req.file?.buffer) {
       const saved = await saveImageAsset(req.file.buffer, req.file.mimetype);
@@ -214,8 +236,15 @@ router.get("/:id", async (req, res) => {
 // });
 
 router.delete("/:id", auth, async (req, res) => {
-  await Poet.findByIdAndDelete(req.params.id);
-  res.json({ success: true });
+  try {
+    const result = await setDisplayOrder(Poet, req.params.id, null, 20);
+    if (result.notFound) return res.status(404).json({ message: "Poet not found." });
+    await Poet.findByIdAndDelete(req.params.id);
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Delete poet failed:", error.name || "UnknownError");
+    return res.status(500).json({ message: "Unable to delete poet." });
+  }
 });
 
 module.exports = router;

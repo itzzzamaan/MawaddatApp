@@ -2,7 +2,40 @@ Production deployment notes
 
 This project includes a simple Express + MongoDB backend.
 
-## Deploying the backend to Vercel
+## Deploying the backend
+
+The mobile app currently uses the Render backend URL. Values in local
+`backend/.env` are not copied to Render or Vercel: configure secrets in the
+hosting provider's service settings, then redeploy/restart the service.
+
+### Render
+
+Render Free web services block outbound traffic on SMTP ports `25`, `465`, and
+`587`. Correct Gmail credentials therefore cannot deliver mail from a Free
+service using SMTP.
+
+To keep using Gmail SMTP, use a Render service plan that permits outbound SMTP
+and add the following in the backend web service's **Environment** settings:
+
+- `SMTP_HOST=smtp.gmail.com`
+- `SMTP_PORT=587`
+- `SMTP_USER`: the Gmail account used to send OTP emails
+- `SMTP_PASS`: a Google App Password for that account (not its normal password)
+- `SMTP_FROM`: the same Gmail address
+
+Alternatively, on Render Free, configure an HTTPS email provider. The backend
+supports Resend with these environment variables:
+
+- `RESEND_API_KEY`: a Resend API key
+- `SMTP_FROM`: a sender address verified with Resend (typically on a domain you
+  control; a Gmail address cannot be used as an unverified sender)
+
+Use the backend's environment settings for other secrets such as `MONGO_URI`
+and `JWT_SECRET` as well. If the Render service cannot connect to Gmail SMTP,
+use the HTTPS provider option instead. Do not put email credentials in the
+mobile app or commit them to the repository. Redeploy after changing settings.
+
+### Deploying the backend to Vercel
 
 Set the Vercel project root directory to `backend`. Vercel detects the exported
 Express app in `app.js`. Add these environment variables in the Vercel project
