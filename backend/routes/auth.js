@@ -79,6 +79,11 @@ const getTransporter = () => {
     host,
     port,
     secure: port === 465,
+    // Fail fast: Render's free tier silently drops outbound SMTP, and nodemailer's
+    // defaults (2 min connect / 10 min socket) would hang the request until timeout.
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
       user,
       pass,

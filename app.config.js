@@ -30,8 +30,26 @@ module.exports = ({ config }) => {
     androidGoogleServices && iosGoogleServices,
   );
   const firebaseIosConfigured = Boolean(iosGoogleServices);
+  // Firebase writes the Web OAuth client (client_type 3) into google-services.json
+  // once the Google provider is enabled and an Android SHA-1 is registered.
+  let googleServicesWebClientId = "";
+  if (androidGoogleServices) {
+    try {
+      const googleServices = JSON.parse(
+        fs.readFileSync(androidGoogleServices, "utf8"),
+      );
+      googleServicesWebClientId =
+        (googleServices.client || [])
+          .flatMap((client) => client.oauth_client || [])
+          .find((oauthClient) => oauthClient.client_type === 3)?.client_id ||
+        "";
+    } catch {
+      // Fall through to the environment variable / default below.
+    }
+  }
   const googleWebClientId =
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+    googleServicesWebClientId ||
     "929703402001-ntnpeoe05rnmdmie89qtq1dojq3sdlsc.apps.googleusercontent.com";
   const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || "";
   const googleIosUrlScheme =

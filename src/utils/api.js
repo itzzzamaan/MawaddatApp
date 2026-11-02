@@ -91,6 +91,11 @@ export const uploadImageToApi = async ({
     }
     formData.append("image", blob, fileName);
   } else {
+    // Picker URIs can be extensionless (content://...); give the file part a
+    // valid image extension so the multipart headers are well-formed.
+    if (!/\.(jpe?g|png|webp)$/i.test(fileName)) {
+      fileName = `${fileName.replace(/\.[^.]*$/, "") || "upload"}.jpg`;
+    }
     formData.append("image", { uri, name: fileName, type: mimeType });
   }
 
