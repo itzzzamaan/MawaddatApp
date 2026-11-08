@@ -1,28 +1,41 @@
+import * as ExpoSecureStore from "expo-secure-store";
 import { Platform } from "react-native";
-import * as SecureStore from "expo-secure-store";
 
-// expo-secure-store has no web implementation, so fall back to localStorage there.
-const isWeb = Platform.OS === "web";
-
-const webStorage = () => {
+export async function getItemAsync(key) {
   try {
-    return typeof localStorage !== "undefined" ? localStorage : null;
-  } catch {
+    if (Platform.OS === "web") {
+      return localStorage.getItem(key);
+    }
+
+    return await ExpoSecureStore.getItemAsync(key);
+  } catch (error) {
+    console.error("SecureStore get error:", error);
     return null;
   }
-};
+}
 
-export const getItemAsync = async (key, options) => {
-  if (!isWeb) return SecureStore.getItemAsync(key, options);
-  return webStorage()?.getItem(key) ?? null;
-};
+export async function setItemAsync(key, value) {
+  try {
+    if (Platform.OS === "web") {
+      localStorage.setItem(key, value);
+      return;
+    }
 
-export const setItemAsync = async (key, value, options) => {
-  if (!isWeb) return SecureStore.setItemAsync(key, value, options);
-  webStorage()?.setItem(key, value);
-};
+    await ExpoSecureStore.setItemAsync(key, value);
+  } catch (error) {
+    console.error("SecureStore set error:", error);
+  }
+}
 
-export const deleteItemAsync = async (key, options) => {
-  if (!isWeb) return SecureStore.deleteItemAsync(key, options);
-  webStorage()?.removeItem(key);
-};
+export async function deleteItemAsync(key) {
+  try {
+    if (Platform.OS === "web") {
+      localStorage.removeItem(key);
+      return;
+    }
+
+    await ExpoSecureStore.deleteItemAsync(key);
+  } catch (error) {
+    console.error("SecureStore delete error:", error);
+  }
+}

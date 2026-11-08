@@ -6,7 +6,6 @@ import {
   Alert,
   FlatList,
   Image,
-  ImageBackground,
   Linking,
   Modal,
   Share,
@@ -23,6 +22,7 @@ import {
 } from "react-native-responsive-screen";
 import { useSavedPosts } from "../../contexts/SavedPostsContext";
 import { getApiBase, normalizeImageUrl } from "../../utils/api";
+import SafeImage from "../SafeImage";
 
 const PINK = "#2C1810";
 const BACKGROUND = "#F8F6F2";
@@ -127,6 +127,7 @@ const normalizeCommentItem = (
     return {
       id: String(comment.id || comment._id || `${Date.now()}-${fallbackIndex}`),
       text: comment.text || comment.comment || comment.message || "",
+      userId: String(comment.userId || user?.id || user?._id || ""),
       userName: resolvedName,
       userAvatar: resolvedAvatar,
     };
@@ -152,8 +153,9 @@ const normalizeBackendFeed = (item = {}, fallbackUser = null) => {
     hindi: content.hindi || "",
   };
 
-  const imageValue = item.image || item.avatar || "";
-  const avatarValue = item.avatar || item.image || "";
+  const imageValue =
+    item.image || (item.type === "image" ? item.avatar : "") || "";
+  const avatarValue = item.avatar || "";
   const comments = Array.isArray(item.comments)
     ? item.comments
         .map((comment, index) =>
@@ -266,7 +268,10 @@ export default function Categories({ showOnlySaved = false }) {
   const [wishlistOnly, setWishlistOnly] = useState(showOnlySaved);
   const [commentPostId, setCommentPostId] = useState(null);
   const [commentText, setCommentText] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [expandedPostIds, setExpandedPostIds] = useState({});
+  const [textOverflowByPost, setTextOverflowByPost] = useState({});
 
   const {
     savedPosts,
@@ -383,6 +388,7 @@ export default function Categories({ showOnlySaved = false }) {
   const openComments = (post) => {
     setCommentPostId(post.id);
     setCommentText("");
+    setEditingCommentId(null);
   };
 
   const submitComment = async () => {
@@ -406,10 +412,11 @@ export default function Categories({ showOnlySaved = false }) {
     }
 
     try {
+      const isEditing = Boolean(editingCommentId);
       const response = await fetch(
-        `${getApiBase()}/api/homefeeds/${commentPostId}/comments`,
+        `${getApiBase()}/api/homefeeds/${commentPostId}/comments${isEditing ? `/${editingCommentId}` : ""}`,
         {
-          method: "POST",
+          method: isEditing ? "PATCH" : "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${authToken}`,
@@ -436,6 +443,7 @@ export default function Categories({ showOnlySaved = false }) {
             normalizeCommentItem({
               id: json.comment?.id || Date.now(),
               text: commentText.trim(),
+              userId: user?.id || user?._id || "",
               userName,
               userAvatar,
             }),
@@ -450,24 +458,82 @@ export default function Categories({ showOnlySaved = false }) {
       );
 
       setCommentText("");
-      setCommentPostId(null);
+      setEditingCommentId(null);
+      if (!isEditing) setCommentPostId(null);
       Alert.alert(
-        "Comment added",
-        "Your comment was saved and is now visible on the post.",
+        isEditing ? "Comment updated" : "Comment added",
+        isEditing
+          ? "Your comment was updated."
+          : "Your comment was saved and is now visible on the post.",
       );
     } catch (error) {
       console.log("Comment submit failed:", error);
       Alert.alert(
-        "Unable to add comment",
+        editingCommentId ? "Unable to update comment" : "Unable to add comment",
         error.message || "Please try again.",
       );
     }
   };
 
+  const deleteComment = (commentId) => {
+    Alert.alert("Delete comment?", "This comment will be permanently deleted.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          const authToken = await SecureStore.getItemAsync("user_token");
+          if (!authToken) {
+            Alert.alert("Login required", "Please sign in again.");
+            return;
+          }
+
+          try {
+            const response = await fetch(
+              `${getApiBase()}/api/homefeeds/${commentPostId}/comments/${commentId}`,
+              {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${authToken}` },
+              },
+            );
+            const json = await response.json();
+            if (!response.ok) {
+              throw new Error(json?.message || "Failed to delete comment");
+            }
+
+            const serverComments = (json.comments || [])
+              .map((comment, index) => normalizeCommentItem(comment, index))
+              .filter(Boolean);
+            setPosts((current) =>
+              current.map((post) =>
+                post.id === commentPostId
+                  ? { ...post, comments: serverComments }
+                  : post,
+              ),
+            );
+            if (editingCommentId === commentId) {
+              setEditingCommentId(null);
+              setCommentText("");
+            }
+          } catch (error) {
+            Alert.alert(
+              "Unable to delete comment",
+              error.message || "Please try again.",
+            );
+          }
+        },
+      },
+    ]);
+  };
+
   const sharePost = async (post) => {
     try {
+      const content = post.content[language] || "";
+      const postUrl = `${getApiBase()}/share/post/${encodeURIComponent(post.id)}`;
       await Share.share({
-        message: `${post.poet}\n\n${post.content[language] || ""}\n\nShared from Shayari`,
+        title: `${post.poet} on Mawaddat`,
+        message: `${post.poet}\n\n${content}\n\n${postUrl}`,
+        url: postUrl,
       });
     } catch (error) {
       Alert.alert("Unable to share", "Please try again.");
@@ -500,10 +566,7 @@ export default function Categories({ showOnlySaved = false }) {
             onPress={() => handleOpenPoetProfile(normalizedItem)}
             style={styles.avatarButton}
           >
-            <Image
-              source={{ uri: normalizedItem.avatar }}
-              style={styles.avatar}
-            />
+            <SafeImage uri={normalizedItem.avatar} style={styles.avatar} iconSize={18} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -544,8 +607,8 @@ export default function Categories({ showOnlySaved = false }) {
             }
             style={styles.photoPost}
           >
-            <ImageBackground
-              source={{ uri: normalizedItem.image }}
+            <SafeImage
+              uri={normalizedItem.image}
               style={styles.postImage}
               imageStyle={styles.postImageStyle}
             >
@@ -569,7 +632,7 @@ export default function Categories({ showOnlySaved = false }) {
                   </Text>
                 </View>
               </View>
-            </ImageBackground>
+            </SafeImage>
           </TouchableOpacity>
         ) : (
           <View style={styles.textPost}>
@@ -582,9 +645,44 @@ export default function Categories({ showOnlySaved = false }) {
                 styles.shayariText,
                 language === "urdu" && styles.urduText,
               ]}
+              numberOfLines={expandedPostIds[normalizedItem.id] ? undefined : 4}
             >
               {displayContent}
             </Text>
+            <Text
+              style={[
+                styles.shayariText,
+                styles.measureText,
+                language === "urdu" && styles.urduText,
+              ]}
+              onTextLayout={({ nativeEvent }) => {
+                const hasOverflow = nativeEvent.lines.length > 4;
+                setTextOverflowByPost((current) =>
+                  current[normalizedItem.id] === hasOverflow
+                    ? current
+                    : { ...current, [normalizedItem.id]: hasOverflow },
+                );
+              }}
+              pointerEvents="none"
+              accessible={false}
+            >
+              {displayContent}
+            </Text>
+            {textOverflowByPost[normalizedItem.id] ? (
+              <TouchableOpacity
+                onPress={() =>
+                  setExpandedPostIds((current) => ({
+                    ...current,
+                    [normalizedItem.id]: !current[normalizedItem.id],
+                  }))
+                }
+                accessibilityRole="button"
+              >
+                <Text style={styles.readMoreText}>
+                  {expandedPostIds[normalizedItem.id] ? "Show less" : "Read more"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
 
@@ -693,7 +791,7 @@ export default function Categories({ showOnlySaved = false }) {
 
       {!showOnlySaved && (
         <View style={styles.feedHeading}>
-          <Text style={styles.feedTitle}>Today's Feed</Text>
+          <Text style={styles.feedTitle}>Today&apos;s Feed</Text>
           <View style={styles.feedBadge}>
             <Text style={styles.feedBadgeText}>Live</Text>
           </View>
@@ -752,6 +850,28 @@ export default function Categories({ showOnlySaved = false }) {
                       <Text style={styles.commentUser}>{item.userName}</Text>
                       <Text style={styles.commentText}>{item.text}</Text>
                     </View>
+                    {String(item.userId) ===
+                    String(currentUser?.id || currentUser?._id || "") ? (
+                      <View style={styles.commentActions}>
+                        <TouchableOpacity
+                          accessibilityLabel="Edit comment"
+                          onPress={() => {
+                            setEditingCommentId(item.id);
+                            setCommentText(item.text);
+                          }}
+                          style={styles.commentActionButton}
+                        >
+                          <Ionicons name="pencil-outline" size={16} color={TEXT} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          accessibilityLabel="Delete comment"
+                          onPress={() => deleteComment(item.id)}
+                          style={styles.commentActionButton}
+                        >
+                          <Ionicons name="trash-outline" size={16} color="#B42318" />
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
                   </View>
                 )}
                 showsVerticalScrollIndicator={false}
@@ -767,7 +887,7 @@ export default function Categories({ showOnlySaved = false }) {
                 <TextInput
                   value={commentText}
                   onChangeText={setCommentText}
-                  placeholder="Write a comment..."
+                  placeholder={editingCommentId ? "Edit your comment..." : "Write a comment..."}
                   placeholderTextColor="#8A6A53"
                   style={styles.commentInput}
                   multiline
@@ -776,7 +896,11 @@ export default function Categories({ showOnlySaved = false }) {
                   onPress={submitComment}
                   style={styles.sendButton}
                 >
-                  <Ionicons name="send" size={19} color="#FFFFFF" />
+                  <Ionicons
+                    name={editingCommentId ? "checkmark" : "send"}
+                    size={19}
+                    color="#FFFFFF"
+                  />
                 </TouchableOpacity>
               </View>
             </View>
@@ -917,6 +1041,18 @@ const styles = StyleSheet.create({
     lineHeight: wp(6.4),
     color: TEXT,
     fontFamily: "Roboto",
+  },
+  measureText: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    opacity: 0,
+  },
+  readMoreText: {
+    color: "#8A5E3C",
+    fontSize: wp(3.2),
+    fontWeight: "700",
+    marginTop: 8,
   },
   urduText: {
     fontSize: wp(5),
@@ -1083,6 +1219,14 @@ const styles = StyleSheet.create({
   },
   commentContent: {
     flex: 1,
+  },
+  commentActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 6,
+  },
+  commentActionButton: {
+    padding: 6,
   },
   commentUser: {
     fontSize: 14,

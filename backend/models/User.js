@@ -15,6 +15,7 @@ const UserSchema = new Schema({
   mobile: String,
   address: String,
   imageUri: String,
+  notificationCity: { type: String, default: "", index: true },
   pushTokens: { type: [String], default: [] },
   followedPoets: {
     type: [{ id: { type: String, default: "" }, name: { type: String, default: "" } }],

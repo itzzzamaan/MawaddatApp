@@ -1,16 +1,31 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const Admin = require('../models/Admin');
-const User = require('../models/User');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
-const crypto = require('crypto');
-const { Buffer } = require('node:buffer');
-const { OAuth2Client } = require('google-auth-library');
-const firebaseAuth = require('firebase-admin/auth');
-const firebaseAdmin = require('../firebaseAdmin');
+const Admin = require("../models/Admin");
+const User = require("../models/User");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const { OAuth2Client } = require("google-auth-library");
+const firebaseAuth = require("firebase-admin/auth");
+const firebaseAdmin = require("../firebaseAdmin");
+const {
+  sendOtpEmail,
+  getOtpDeliveryError,
+  maskEmail,
+} = require("../utils/email");
+const {
+  issueOtp,
+  discardOtp,
+  verifyOtp,
+  consumeSession,
+  createIpLimiter,
+  shouldExposeOtp,
+} = require("../utils/otp");
 const googleOAuthClient = new OAuth2Client();
+
+const MIN_PASSWORD_LENGTH = 8;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const otpSendLimiter = createIpLimiter({ windowMs: 10 * 60 * 1000, max: 20 });
+const otpVerifyLimiter = createIpLimiter({ windowMs: 10 * 60 * 1000, max: 60 });
 
 const pendingOtps = new Map();
 const pendingPasswordResets = new Map();
@@ -19,14 +34,16 @@ const passwordResetTokens = new Map();
 const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
 
 const getOtpMessage = (email, otp, purpose) => {
-  const isPasswordReset = purpose === 'password-reset';
+  const isPasswordReset = purpose === "password-reset";
   return {
     to: email,
-    subject: isPasswordReset ? 'Reset your Mawaddat password' : 'Your Mawaddat signup OTP',
+    subject: isPasswordReset
+      ? "Reset your Mawaddat password"
+      : "Your Mawaddat signup OTP",
     html: `
       <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-        <h2 style="margin-bottom: 12px;">${isPasswordReset ? 'Password reset code' : 'Your verification code'}</h2>
-        <p>${isPasswordReset ? 'Use this code to reset your Mawaddat password.' : 'Use the code below to complete your signup.'}</p>
+        <h2 style="margin-bottom: 12px;">${isPasswordReset ? "Password reset code" : "Your verification code"}</h2>
+        <p>${isPasswordReset ? "Use this code to reset your Mawaddat password." : "Use the code below to complete your signup."}</p>
         <div style="font-size: 32px; letter-spacing: 6px; font-weight: 700; margin: 18px 0; padding: 16px 20px; background: #f3f4f6; border-radius: 10px; display: inline-block;">
           ${otp}
         </div>
@@ -37,11 +54,11 @@ const getOtpMessage = (email, otp, purpose) => {
 };
 
 const sendOtpWithResend = async (email, otp, purpose) => {
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       from: process.env.SMTP_FROM,
@@ -51,27 +68,27 @@ const sendOtpWithResend = async (email, otp, purpose) => {
   });
 
   if (!response.ok) {
-    const error = new Error('Email provider rejected the OTP message.');
-    error.code = 'EMAIL_PROVIDER_REJECTED';
+    const error = new Error("Email provider rejected the OTP message.");
+    error.code = "EMAIL_PROVIDER_REJECTED";
     error.status = response.status;
     throw error;
   }
 };
 
 const getTransporter = () => {
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const host = process.env.SMTP_HOST || "smtp.gmail.com";
   const port = Number(process.env.SMTP_PORT || 587);
   const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS?.replace(/\s/g, '');
+  const pass = process.env.SMTP_PASS?.replace(/\s/g, "");
 
   if (!user || !pass) {
-    const error = new Error('SMTP_USER and SMTP_PASS must be configured.');
-    error.code = 'SMTP_NOT_CONFIGURED';
+    const error = new Error("SMTP_USER and SMTP_PASS must be configured.");
+    error.code = "SMTP_NOT_CONFIGURED";
     throw error;
   }
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    const error = new Error('SMTP_PORT must be a valid port number.');
-    error.code = 'SMTP_INVALID_PORT';
+    const error = new Error("SMTP_PORT must be a valid port number.");
+    error.code = "SMTP_INVALID_PORT";
     throw error;
   }
 
@@ -91,300 +108,335 @@ const getTransporter = () => {
   });
 };
 
-const sendOtpEmail = async (email, otp, purpose = 'signup') => {
-  if (process.env.RESEND_API_KEY) {
-    if (!process.env.SMTP_FROM) {
-      const error = new Error('SMTP_FROM must be a verified sender address when using Resend.');
-      error.code = 'EMAIL_SENDER_NOT_CONFIGURED';
+const normalizeEmail = (email) =>
+  String(email || "")
+    .trim()
+    .toLowerCase();
+const normalizeOtp = (otp) => String(otp || "").replace(/\s/g, "");
+
+const signUserToken = (user) =>
+  jwt.sign(
+    { id: user._id, email: user.email, role: "user" },
+    process.env.JWT_SECRET || "change_this_secret",
+    { expiresIn: "7d" },
+  );
+
+// Issues an OTP, emails it and rolls the OTP back if delivery fails.
+// A decoy (unknown account) goes through the same rate limits but sends nothing.
+const issueAndSendOtp = async ({
+  email,
+  purpose,
+  decoy = false,
+  ...payload
+}) => {
+  const issued = await issueOtp({ email, purpose, decoy, ...payload });
+  if (!decoy) {
+    try {
+      await sendOtpEmail(email, issued.otp, purpose);
+    } catch (error) {
+      await discardOtp(email, purpose);
       throw error;
     }
-
-    await sendOtpWithResend(email, otp, purpose);
-    return { message: 'OTP email sent successfully.' };
   }
-
-  const transporter = getTransporter();
-  try {
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      ...getOtpMessage(email, otp, purpose),
-    });
-    return { message: 'OTP email sent successfully.' };
-  } finally {
-    transporter.close();
-  }
-};
-
-const getOtpDeliveryError = (error) => {
-  const code = error.code || error.name || 'UnknownError';
-  console.error('OTP email delivery failed:', code);
-
-  if (code === 'SMTP_NOT_CONFIGURED' || code === 'SMTP_INVALID_PORT' || code === 'EMAIL_SENDER_NOT_CONFIGURED') {
-    return {
-      status: 503,
-      message: 'Email delivery is not configured correctly on the backend.',
-    };
-  }
-
-  if (code === 'ETIMEDOUT' || code === 'ESOCKET' || code === 'ECONNECTION' || code === 'ECONNREFUSED') {
-    return {
-      status: 503,
-      message: 'The backend cannot reach its SMTP server. If hosted on Render Free, use an HTTPS email provider or a plan that allows SMTP.',
-    };
-  }
-
   return {
-    status: 502,
-    message: 'Unable to send the verification email. Check the backend email-provider settings and logs.',
+    expiresInSeconds: issued.expiresInSeconds,
+    resendAfterSeconds: issued.resendAfterSeconds,
+    otp: shouldExposeOtp() ? issued.otp : undefined,
   };
 };
 
-const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+const isOtpError = (err) =>
+  err.status && String(err.code || "").startsWith("OTP_");
 
-router.post('/forgot-password/send-otp', async (req, res) => {
+const sendOtpFailure = (res, err) => {
+  if (isOtpError(err)) {
+    if (err.retryAfter) res.set("Retry-After", String(err.retryAfter));
+    return res.status(err.status).json({
+      message: err.message,
+      code: err.code,
+      retryAfter: err.retryAfter,
+    });
+  }
+  const deliveryError = getOtpDeliveryError(err);
+  return res
+    .status(deliveryError.status)
+    .json({ message: deliveryError.message });
+};
+
+const RESET_GENERIC_MESSAGE =
+  "If an account exists for that email, a verification code has been sent.";
+
+router.post("/forgot-password/send-otp", otpSendLimiter, async (req, res) => {
   try {
     const email = normalizeEmail(req.body?.email);
-    if (!email) return res.status(400).json({ message: 'Email is required.' });
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(200).json({
-        message: 'If an account exists for that email, a verification code has been sent.',
-      });
+    if (!email || !EMAIL_PATTERN.test(email)) {
+      return res.status(400).json({ message: "Enter a valid email address." });
     }
 
-    const otp = generateOtp();
-    await sendOtpEmail(email, otp, 'password-reset');
-    pendingPasswordResets.set(email, {
-      otpHash: crypto.createHash('sha256').update(otp).digest('hex'),
-      createdAt: Date.now(),
-      attempts: 0,
+    const user = await User.findOne({ email });
+    const result = await issueAndSendOtp({
+      email,
+      purpose: "password-reset",
+      decoy: !user,
     });
 
     return res.status(200).json({
-      message: 'If an account exists for that email, a verification code has been sent.',
-      otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
+      message: RESET_GENERIC_MESSAGE,
+      expiresInSeconds: result.expiresInSeconds,
+      resendAfterSeconds: result.resendAfterSeconds,
+      otp: user ? result.otp : undefined,
     });
   } catch (err) {
-    const deliveryError = getOtpDeliveryError(err);
-    return res.status(deliveryError.status).json({ message: deliveryError.message });
+    return sendOtpFailure(res, err);
   }
 });
 
-router.post('/forgot-password/verify-otp', async (req, res) => {
-  const email = normalizeEmail(req.body?.email);
-  const otp = String(req.body?.otp || '').trim();
-  if (!email || !otp) {
-    return res.status(400).json({ message: 'Email and verification code are required.' });
-  }
+router.post(
+  "/forgot-password/verify-otp",
+  otpVerifyLimiter,
+  async (req, res) => {
+    try {
+      const email = normalizeEmail(req.body?.email);
+      const otp = normalizeOtp(req.body?.otp);
+      if (!email || !otp) {
+        return res
+          .status(400)
+          .json({ message: "Email and verification code are required." });
+      }
 
-  const pending = pendingPasswordResets.get(email);
-  if (!pending || Date.now() - pending.createdAt > 10 * 60 * 1000) {
-    pendingPasswordResets.delete(email);
-    return res.status(400).json({ message: 'The code is invalid or expired. Request a new code.' });
-  }
+      const { sessionToken } = await verifyOtp({
+        email,
+        purpose: "password-reset",
+        otp,
+      });
+      return res
+        .status(200)
+        .json({ message: "Code verified.", resetToken: sessionToken });
+    } catch (err) {
+      if (isOtpError(err)) return sendOtpFailure(res, err);
+      console.error(
+        "Password reset OTP verification error:",
+        err.name || "UnknownError",
+      );
+      return res.status(500).json({ message: "Failed to verify code." });
+    }
+  },
+);
 
-  if (pending.attempts >= 5) {
-    pendingPasswordResets.delete(email);
-    return res.status(429).json({ message: 'Too many attempts. Request a new code.' });
-  }
-
-  pending.attempts += 1;
-  const submittedHash = crypto.createHash('sha256').update(otp).digest();
-  const expectedHash = Buffer.from(pending.otpHash, 'hex');
-  if (!crypto.timingSafeEqual(submittedHash, expectedHash)) {
-    return res.status(400).json({ message: 'The code is invalid or expired. Request a new code.' });
-  }
-
-  pendingPasswordResets.delete(email);
-  const resetToken = crypto.randomBytes(32).toString('hex');
-  passwordResetTokens.set(resetToken, { email, createdAt: Date.now() });
-  return res.status(200).json({ message: 'Code verified.', resetToken });
-});
-
-router.post('/forgot-password/reset', async (req, res) => {
+router.post("/forgot-password/reset", otpVerifyLimiter, async (req, res) => {
   try {
-    const resetToken = String(req.body?.resetToken || '');
-    const password = String(req.body?.password || '');
-    if (!resetToken || password.length < 8) {
-      return res.status(400).json({ message: 'A verified reset session and password of at least 8 characters are required.' });
+    const resetToken = String(req.body?.resetToken || "");
+    const password = String(req.body?.password || "");
+    if (!resetToken || password.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({
+        message: `A verified reset session and password of at least ${MIN_PASSWORD_LENGTH} characters are required.`,
+      });
     }
 
-    const reset = passwordResetTokens.get(resetToken);
-    if (!reset || Date.now() - reset.createdAt > 10 * 60 * 1000) {
-      passwordResetTokens.delete(resetToken);
-      return res.status(400).json({ message: 'Your reset session expired. Request a new code.' });
+    const session = await consumeSession({
+      purpose: "password-reset",
+      sessionToken: resetToken,
+    });
+    if (!session) {
+      return res
+        .status(400)
+        .json({ message: "Your reset session expired. Request a new code." });
     }
 
-    const user = await User.findOne({ email: reset.email });
+    const user = await User.findOne({ email: session.email });
     if (!user) {
-      passwordResetTokens.delete(resetToken);
-      return res.status(400).json({ message: 'Unable to reset this account. Request a new code.' });
+      return res
+        .status(400)
+        .json({ message: "Unable to reset this account. Request a new code." });
     }
 
     user.password = await bcrypt.hash(password, 10);
     await user.save();
-    passwordResetTokens.delete(resetToken);
-    return res.status(200).json({ message: 'Password updated successfully.' });
+    console.info(`Password reset completed for ${maskEmail(user.email)}`);
+    return res.status(200).json({ message: "Password updated successfully." });
   } catch (err) {
-    console.error('Password reset error:', err);
-    return res.status(500).json({ message: 'Unable to update your password right now.' });
+    console.error("Password reset error:", err.name || "UnknownError");
+    return res
+      .status(500)
+      .json({ message: "Unable to update your password right now." });
   }
 });
 
-const getPendingSignup = (email) => {
-  if (!email) return null;
-  const key = String(email).trim().toLowerCase();
-  return pendingOtps.get(key) || null;
-};
-
-const setPendingSignup = (email, data) => {
-  if (!email) return;
-  pendingOtps.set(String(email).trim().toLowerCase(), {
-    ...data,
-    createdAt: Date.now(),
-  });
-};
-
-const deletePendingSignup = (email) => {
-  if (!email) return;
-  pendingOtps.delete(String(email).trim().toLowerCase());
-};
-
-router.post('/send-signup-otp', async (req, res) => {
+router.post("/send-signup-otp", otpSendLimiter, async (req, res) => {
   try {
-    const { name, email, password } = req.body || {};
+    const { name, password } = req.body || {};
+    const email = normalizeEmail(req.body?.email);
 
     if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Name, email, and password are required.' });
+      return res
+        .status(400)
+        .json({ message: "Name, email, and password are required." });
+    }
+    if (!EMAIL_PATTERN.test(email)) {
+      return res.status(400).json({ message: "Enter a valid email address." });
+    }
+    if (String(password).length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({
+        message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
+      });
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const emailExists = await User.findOne({ email: normalizedEmail });
-
-    if (emailExists) {
-      return res.status(400).json({ message: 'Email already registered' });
+    if (await User.findOne({ email })) {
+      return res.status(400).json({ message: "Email already registered" });
     }
 
-    const otp = generateOtp();
-    const emailResult = await sendOtpEmail(normalizedEmail, otp);
-    setPendingSignup(normalizedEmail, { name, email: normalizedEmail, password, otp });
+    const result = await issueAndSendOtp({
+      email,
+      purpose: "signup",
+      name: String(name).trim().slice(0, 100),
+      passwordHash: await bcrypt.hash(String(password), 10),
+    });
 
     return res.status(200).json({
-      message: emailResult.message,
-      otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
+      message: "OTP email sent successfully.",
+      expiresInSeconds: result.expiresInSeconds,
+      resendAfterSeconds: result.resendAfterSeconds,
+      otp: result.otp,
     });
   } catch (err) {
-    const deliveryError = getOtpDeliveryError(err);
-    return res.status(deliveryError.status).json({ message: deliveryError.message });
+    return sendOtpFailure(res, err);
   }
 });
 
-router.post('/verify-signup-otp', async (req, res) => {
+router.post("/verify-signup-otp", otpVerifyLimiter, async (req, res) => {
   try {
-    const { email, otp } = req.body || {};
+    const email = normalizeEmail(req.body?.email);
+    const otp = normalizeOtp(req.body?.otp);
 
     if (!email || !otp) {
-      return res.status(400).json({ message: 'Email and OTP are required.' });
+      return res.status(400).json({ message: "Email and OTP are required." });
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const pending = getPendingSignup(normalizedEmail);
-
-    if (!pending) {
-      return res.status(400).json({ message: 'No pending signup found for this email. Please request a new OTP.' });
-    }
-
-    const expiryMs = 10 * 60 * 1000;
-    if (Date.now() - pending.createdAt > expiryMs) {
-      deletePendingSignup(normalizedEmail);
-      return res.status(410).json({ message: 'OTP expired. Please request a new one.' });
-    }
-
-    if (String(pending.otp) !== String(otp)) {
-      return res.status(400).json({ message: 'Invalid OTP. Please check the code and try again.' });
-    }
-
-    deletePendingSignup(normalizedEmail);
-    return res.status(200).json({ message: 'OTP verified successfully.' });
+    const { sessionToken } = await verifyOtp({ email, purpose: "signup", otp });
+    return res
+      .status(200)
+      .json({
+        message: "OTP verified successfully.",
+        signupToken: sessionToken,
+      });
   } catch (err) {
-    console.error('Verify signup OTP error:', err);
-    return res.status(500).json({ message: 'Failed to verify OTP' });
+    if (isOtpError(err)) return sendOtpFailure(res, err);
+    console.error("Verify signup OTP error:", err.name || "UnknownError");
+    return res.status(500).json({ message: "Failed to verify OTP" });
   }
 });
 
-// Signup for regular users
-router.post('/signup', async (req, res) => {
+// Completes signup. Requires the one-time signupToken issued by /verify-signup-otp,
+// so an account can never be created for an email that was not verified.
+router.post("/signup", otpVerifyLimiter, async (req, res) => {
   try {
-    const { name, email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
+    const email = normalizeEmail(req.body?.email);
+    const signupToken = req.body?.signupToken;
+    if (!email || !signupToken) {
+      return res
+        .status(400)
+        .json({ message: "Email and a verified signup session are required." });
+    }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const exists = await User.findOne({ email: normalizedEmail });
-    if (exists) return res.status(400).json({ message: 'Email already registered' });
+    const session = await consumeSession({
+      purpose: "signup",
+      sessionToken: signupToken,
+      email,
+    });
+    if (!session || !session.passwordHash) {
+      return res
+        .status(400)
+        .json({ message: "Your signup session expired. Request a new OTP." });
+    }
 
-    const hash = await bcrypt.hash(password, 10);
-    const u = new User({ name, email: normalizedEmail, password: hash });
-    await u.save();
-    const token = jwt.sign({ id: u._id, email: u.email, role: 'user' }, process.env.JWT_SECRET || 'change_this_secret', { expiresIn: '7d' });
-    res.json({ token, user: { id: u._id, name: u.name, email: u.email } });
+    if (await User.findOne({ email })) {
+      return res.status(400).json({ message: "Email already registered" });
+    }
+
+    const user = new User({
+      name: session.name,
+      email,
+      password: session.passwordHash,
+    });
+    await user.save();
+    console.info(`Signup completed for ${maskEmail(email)}`);
+    res.json({
+      token: signUserToken(user),
+      user: { id: user._id, name: user.name, email: user.email },
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
+    if (err.code === 11000)
+      return res.status(400).json({ message: "Email already registered" });
+    console.error("Signup error:", err.name || "UnknownError");
+    res.status(500).json({ message: "Server error" });
   }
 });
 
-router.post('/user-login', async (req, res) => {
+router.post("/user-login", async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required.' });
+      return res
+        .status(400)
+        .json({ message: "Email and password are required." });
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
     if (!user.password) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const token = jwt.sign({ id: user._id, email: user.email, role: 'user' }, process.env.JWT_SECRET || 'change_this_secret', { expiresIn: '7d' });
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: "user" },
+      process.env.JWT_SECRET || "change_this_secret",
+      { expiresIn: "7d" },
+    );
     return res.status(200).json({
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        imageUri: user.imageUri || 'https://www.iconpacks.net/icons/2/free-user-icon-3296-thumb.png',
+        imageUri:
+          user.imageUri ||
+          "https://www.iconpacks.net/icons/2/free-user-icon-3296-thumb.png",
       },
     });
   } catch (err) {
-    console.error('User login error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    console.error("User login error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 });
 
-router.post('/google', async (req, res) => {
+router.post("/google", async (req, res) => {
   const audience =
     process.env.GOOGLE_WEB_CLIENT_ID ||
-    '929703402001-ntnpeoe05rnmdmie89qtq1dojq3sdlsc.apps.googleusercontent.com';
+    "929703402001-ntnpeoe05rnmdmie89qtq1dojq3sdlsc.apps.googleusercontent.com";
   const idToken = req.body?.idToken;
 
   if (!audience) {
     return res.status(503).json({
-      message: 'Google sign-in is not configured on the backend.',
+      message: "Google sign-in is not configured on the backend.",
     });
   }
-  if (typeof idToken !== 'string' || idToken.length === 0 || idToken.length > 10000) {
-    return res.status(400).json({ message: 'A valid Google ID token is required.' });
+  if (
+    typeof idToken !== "string" ||
+    idToken.length === 0 ||
+    idToken.length > 10000
+  ) {
+    return res
+      .status(400)
+      .json({ message: "A valid Google ID token is required." });
   }
 
   let payload;
@@ -395,28 +447,24 @@ router.post('/google', async (req, res) => {
     });
     payload = ticket.getPayload();
   } catch (error) {
-    const code = error.code || error.name || 'UnknownError';
-    console.error('Google ID token verification failed:', code);
+    const code = error.code || error.name || "UnknownError";
+    console.error("Google ID token verification failed:", code);
     const unavailableCodes = new Set([
-      'ECONNRESET',
-      'ETIMEDOUT',
-      'ENOTFOUND',
-      'EAI_AGAIN',
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "ENOTFOUND",
+      "EAI_AGAIN",
     ]);
     return res.status(unavailableCodes.has(code) ? 503 : 401).json({
       message: unavailableCodes.has(code)
-        ? 'Google sign-in verification is temporarily unavailable.'
-        : 'Google sign-in token is invalid or expired.',
+        ? "Google sign-in verification is temporarily unavailable."
+        : "Google sign-in token is invalid or expired.",
     });
   }
 
-  if (
-    !payload?.sub ||
-    !payload.email ||
-    payload.email_verified !== true
-  ) {
+  if (!payload?.sub || !payload.email || payload.email_verified !== true) {
     return res.status(401).json({
-      message: 'Google must verify your email before you can sign in.',
+      message: "Google must verify your email before you can sign in.",
     });
   }
 
@@ -428,7 +476,8 @@ router.post('/google', async (req, res) => {
       const emailOwner = await User.findOne({ email: normalizedEmail });
       if (emailOwner && String(emailOwner._id) !== String(user._id)) {
         return res.status(409).json({
-          message: 'This Google account email is already associated with another account.',
+          message:
+            "This Google account email is already associated with another account.",
         });
       }
       user.email = normalizedEmail;
@@ -438,14 +487,17 @@ router.post('/google', async (req, res) => {
       user = await User.findOne({ email: normalizedEmail });
       if (user?.googleId && user.googleId !== payload.sub) {
         return res.status(409).json({
-          message: 'This email is already linked to a different Google account.',
+          message:
+            "This email is already linked to a different Google account.",
         });
       }
     }
 
     if (!user) {
       user = new User({
-        name: String(payload.name || payload.given_name || normalizedEmail.split('@')[0]).trim(),
+        name: String(
+          payload.name || payload.given_name || normalizedEmail.split("@")[0],
+        ).trim(),
         email: normalizedEmail,
         googleId: payload.sub,
         imageUri: payload.picture,
@@ -459,9 +511,9 @@ router.post('/google', async (req, res) => {
     await user.save();
 
     const token = jwt.sign(
-      { id: user._id, email: user.email, role: 'user' },
-      process.env.JWT_SECRET || 'change_this_secret',
-      { expiresIn: '7d' },
+      { id: user._id, email: user.email, role: "user" },
+      process.env.JWT_SECRET || "change_this_secret",
+      { expiresIn: "7d" },
     );
 
     return res.status(200).json({
@@ -472,25 +524,34 @@ router.post('/google', async (req, res) => {
         email: user.email,
         imageUri:
           user.imageUri ||
-          'https://www.iconpacks.net/icons/2/free-user-icon-3296-thumb.png',
+          "https://www.iconpacks.net/icons/2/free-user-icon-3296-thumb.png",
       },
     });
   } catch (error) {
     if (error.code === 11000) {
       return res.status(409).json({
-        message: 'An account already exists for this Google identity. Please try again.',
+        message:
+          "An account already exists for this Google identity. Please try again.",
       });
     }
 
-    console.error('Google user sign-in failed:', error.name || 'UnknownError');
-    return res.status(500).json({ message: 'Unable to sign in with Google right now.' });
+    console.error("Google user sign-in failed:", error.name || "UnknownError");
+    return res
+      .status(500)
+      .json({ message: "Unable to sign in with Google right now." });
   }
 });
 
-router.post('/firebase', async (req, res) => {
+router.post("/firebase", async (req, res) => {
   const idToken = req.body?.idToken;
-  if (typeof idToken !== 'string' || idToken.length === 0 || idToken.length > 10000) {
-    return res.status(400).json({ message: 'A valid Firebase ID token is required.' });
+  if (
+    typeof idToken !== "string" ||
+    idToken.length === 0 ||
+    idToken.length > 10000
+  ) {
+    return res
+      .status(400)
+      .json({ message: "A valid Firebase ID token is required." });
   }
 
   let decodedToken;
@@ -498,18 +559,18 @@ router.post('/firebase', async (req, res) => {
     const app = firebaseAdmin.getFirebaseAdminApp();
     decodedToken = await firebaseAuth.getAuth(app).verifyIdToken(idToken, true);
   } catch (error) {
-    const code = error.code || error.name || 'UnknownError';
-    console.error('Firebase ID token verification failed:', code);
+    const code = error.code || error.name || "UnknownError";
+    console.error("Firebase ID token verification failed:", code);
     const configurationErrors = new Set([
-      'FIREBASE_ADMIN_NOT_CONFIGURED',
-      'FIREBASE_ADMIN_INVALID_CONFIGURATION',
-      'app/invalid-credential',
-      'app/invalid-credential-value',
+      "FIREBASE_ADMIN_NOT_CONFIGURED",
+      "FIREBASE_ADMIN_INVALID_CONFIGURATION",
+      "app/invalid-credential",
+      "app/invalid-credential-value",
     ]);
     return res.status(configurationErrors.has(code) ? 503 : 401).json({
       message: configurationErrors.has(code)
-        ? 'Firebase sign-in is not configured on the backend.'
-        : 'Firebase sign-in token is invalid or expired.',
+        ? "Firebase sign-in is not configured on the backend."
+        : "Firebase sign-in token is invalid or expired.",
     });
   }
 
@@ -519,7 +580,7 @@ router.post('/firebase', async (req, res) => {
     decodedToken.email_verified !== true
   ) {
     return res.status(401).json({
-      message: 'Verify your email address before signing in to Mawaddat.',
+      message: "Verify your email address before signing in to Mawaddat.",
     });
   }
 
@@ -527,11 +588,12 @@ router.post('/firebase', async (req, res) => {
     const firebaseUid = String(decodedToken.uid);
     const normalizedEmail = normalizeEmail(decodedToken.email);
     const profileName =
-      String(decodedToken.name || req.body?.name || '').trim().slice(0, 100) ||
-      normalizedEmail.split('@')[0];
+      String(decodedToken.name || req.body?.name || "")
+        .trim()
+        .slice(0, 100) || normalizedEmail.split("@")[0];
     const profileImage =
       decodedToken.picture ||
-      (typeof req.body?.imageUri === 'string' &&
+      (typeof req.body?.imageUri === "string" &&
       /^https:\/\//i.test(req.body.imageUri)
         ? req.body.imageUri
         : undefined);
@@ -541,7 +603,8 @@ router.post('/firebase', async (req, res) => {
       const emailOwner = await User.findOne({ email: normalizedEmail });
       if (emailOwner && String(emailOwner._id) !== String(user._id)) {
         return res.status(409).json({
-          message: 'This email is already associated with another Mawaddat account.',
+          message:
+            "This email is already associated with another Mawaddat account.",
         });
       }
       user.email = normalizedEmail;
@@ -551,7 +614,8 @@ router.post('/firebase', async (req, res) => {
       user = await User.findOne({ email: normalizedEmail });
       if (user?.firebaseUid && user.firebaseUid !== firebaseUid) {
         return res.status(409).json({
-          message: 'This email is already associated with another Firebase account.',
+          message:
+            "This email is already associated with another Firebase account.",
         });
       }
     }
@@ -572,9 +636,9 @@ router.post('/firebase', async (req, res) => {
     await user.save();
 
     const token = jwt.sign(
-      { id: user._id, email: user.email, role: 'user' },
-      process.env.JWT_SECRET || 'change_this_secret',
-      { expiresIn: '7d' },
+      { id: user._id, email: user.email, role: "user" },
+      process.env.JWT_SECRET || "change_this_secret",
+      { expiresIn: "7d" },
     );
 
     return res.status(200).json({
@@ -585,46 +649,53 @@ router.post('/firebase', async (req, res) => {
         email: user.email,
         imageUri:
           user.imageUri ||
-          'https://www.iconpacks.net/icons/2/free-user-icon-3296-thumb.png',
+          "https://www.iconpacks.net/icons/2/free-user-icon-3296-thumb.png",
       },
     });
   } catch (error) {
     if (error.code === 11000) {
       return res.status(409).json({
-        message: 'This Firebase account is already linked to a Mawaddat user.',
+        message: "This Firebase account is already linked to a Mawaddat user.",
       });
     }
 
-    console.error('Firebase user sign-in failed:', error.name || 'UnknownError');
-    return res.status(500).json({ message: 'Unable to sign in with Firebase right now.' });
+    console.error(
+      "Firebase user sign-in failed:",
+      error.name || "UnknownError",
+    );
+    return res
+      .status(500)
+      .json({ message: "Unable to sign in with Firebase right now." });
   }
 });
 
-router.post('/login', async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const email = normalizeEmail(req.body?.email);
     const password = req.body?.password;
-    if (!email || typeof password !== 'string' || password.length === 0) {
-      return res.status(400).json({ message: 'Email and password are required.' });
+    if (!email || typeof password !== "string" || password.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Email and password are required." });
     }
 
     const admin = await Admin.findOne({ email });
     if (!admin || !(await bcrypt.compare(password, admin.password))) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
     const token = jwt.sign(
-      { id: admin._id, email: admin.email, role: 'admin' },
-      process.env.JWT_SECRET || 'change_this_secret',
-      { expiresIn: '7d' },
+      { id: admin._id, email: admin.email, role: "admin" },
+      process.env.JWT_SECRET || "change_this_secret",
+      { expiresIn: "7d" },
     );
     return res.json({
       token,
       admin: { email: admin.email, name: admin.name },
     });
   } catch (error) {
-    console.error('Admin login failed:', error.name || 'UnknownError');
-    return res.status(500).json({ message: 'Unable to sign in right now.' });
+    console.error("Admin login failed:", error.name || "UnknownError");
+    return res.status(500).json({ message: "Unable to sign in right now." });
   }
 });
 

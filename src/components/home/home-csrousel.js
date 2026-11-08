@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Dimensions,
   FlatList,
-  ImageBackground,
   StyleSheet,
   Text,
   View,
@@ -13,6 +12,7 @@ import { widthPercentageToDP } from "react-native-responsive-screen";
 const windowWidth = Dimensions.get("window").width;
 
 import { getApiBase, normalizeImageUrl } from "../../utils/api";
+import SafeImage from "../SafeImage";
 
 
 function HomeCarousel() {
@@ -75,8 +75,8 @@ function HomeCarousel() {
         data={items}
         keyExtractor={(item, index) => String(item._id || index)}
         renderItem={({ item }) => (
-          <ImageBackground
-            source={item.image ? { uri: normalizeImageUrl(item.image) } : null}
+          <SafeImage
+            uri={normalizeImageUrl(item.image)}
             style={styles.carouselImage}
             imageStyle={{ resizeMode: "cover" }}
           >
@@ -92,7 +92,7 @@ function HomeCarousel() {
                 </Text>
               </View>
             </View>
-          </ImageBackground>
+          </SafeImage>
         )}
       />
     </View>

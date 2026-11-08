@@ -1,6 +1,14 @@
 import { Platform, TurboModuleRegistry } from "react-native";
 import * as SecureStore from "@/utils/secureStorage";
 import { getApiBase, parseApiResponse } from "./api";
+import { storeUserSession } from "./otpApi";
+
+export class BackendUnreachableError extends Error {
+  constructor() {
+    super("Can't reach the Mawaddat server. Check your connection and try again.");
+    this.code = "BACKEND_UNREACHABLE";
+  }
+}
 
 export async function getFirebaseAuthApi() {
   if (Platform.OS === "web") {
@@ -48,15 +56,20 @@ export function getFirebaseAuthErrorMessage(error) {
 export async function completeFirebaseSignIn(firebaseUser) {
   const firebaseAuth = await getFirebaseAuthApi();
   const idToken = await firebaseAuth.getIdToken(firebaseUser);
-  const response = await fetch(`${getApiBase()}/api/auth/firebase`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      idToken,
-      name: firebaseUser.displayName || "",
-      imageUri: firebaseUser.photoURL || "",
-    }),
-  });
+  let response;
+  try {
+    response = await fetch(`${getApiBase()}/api/auth/firebase`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        idToken,
+        name: firebaseUser.displayName || "",
+        imageUri: firebaseUser.photoURL || "",
+      }),
+    });
+  } catch {
+    throw new BackendUnreachableError();
+  }
   const data = await parseApiResponse(response);
 
   if (!response.ok) {
@@ -84,4 +97,30 @@ export async function completeFirebaseSignIn(firebaseUser) {
   await SecureStore.setItemAsync("user_profile", JSON.stringify(user));
 
   return user;
+}
+
+// Exchanges a Google ID token for a Mawaddat session directly with the backend
+// (POST /api/auth/google). It needs no Firebase client or Admin credentials, so it is
+// the fallback when the Firebase step is unavailable or misconfigured.
+export async function completeGoogleSignIn(googleIdToken) {
+  let response;
+  try {
+    response = await fetch(`${getApiBase()}/api/auth/google`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken: googleIdToken }),
+    });
+  } catch {
+    throw new BackendUnreachableError();
+  }
+  const data = await parseApiResponse(response);
+
+  if (!response.ok) {
+    throw new Error(data.message || "Unable to complete Google sign-in with Mawaddat.");
+  }
+  if (!data.token || !data.user) {
+    throw new Error("The backend returned an incomplete sign-in response.");
+  }
+
+  return storeUserSession(data);
 }

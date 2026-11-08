@@ -1,7 +1,9 @@
 require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 
+const crypto = require("crypto");
 const mongoose = require("mongoose");
 const ImageAsset = require("./models/ImageAsset");
+const { detectImageType } = require("./utils/imageType");
 
 let connectionPromise;
 
@@ -37,18 +39,24 @@ const getImageExtension = (contentType) => {
   return extension;
 };
 
-const saveImageAsset = async (data, contentType) => {
+// Images live in MongoDB (not on the host filesystem), so they survive Render restarts
+// and redeploys. The stored type always comes from the file's bytes, never from the
+// client-supplied `contentType`, and identical files are stored once.
+const saveImageAsset = async (data, clientContentType) => {
   if (!Buffer.isBuffer(data) || data.length === 0) {
     throw new Error("Image data is empty");
   }
 
-  const extension = getImageExtension(contentType);
-  const image = await ImageAsset.create({
-    data,
-    contentType: contentType.toLowerCase(),
-  });
-  const filename = `${image._id}.${extension}`;
+  const contentType = detectImageType(data);
+  if (!contentType) throw new Error("Unsupported image type");
 
+  const hash = crypto.createHash("sha256").update(data).digest("hex");
+  let image = await ImageAsset.findOne({ hash, contentType }).select("_id contentType");
+  if (!image) {
+    image = await ImageAsset.create({ data, contentType, hash });
+  }
+
+  const filename = `${image._id}.${getImageExtension(contentType)}`;
   return { filename, path: `/uploads/${filename}` };
 };
 

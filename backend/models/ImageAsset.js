@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 const ImageAssetSchema = new mongoose.Schema(
   {
     data: { type: Buffer, required: true },
+    // sha256 of `data`, used to avoid storing the same upload twice. Absent on legacy records.
+    hash: { type: String, index: true },
     contentType: {
       type: String,
       enum: ["image/jpeg", "image/jpg", "image/png", "image/webp"],

@@ -13,9 +13,11 @@ hosting provider's service settings, then redeploy/restart the service.
 Set `MONGO_URI`, `JWT_SECRET`, `FIREBASE_PROJECT_ID`, and
 `FIREBASE_SERVICE_ACCOUNT_JSON` in the backend web service's **Environment**
 settings. Put the Firebase service-account JSON in the host's secure environment
-setting, not in the repository. The mobile app uses Firebase Authentication for
-email verification and password-reset links, so the current app does not depend
-on backend SMTP credentials.
+setting, not in the repository. Signup and password reset use 6-digit email OTPs
+sent by this backend, so Render also needs an email provider: set
+`BREVO_API_KEY`, `EMAIL_FROM` and `EMAIL_REPLY_TO` (Render Free blocks SMTP on ports 25/465/587,
+so SMTP only works on paid plans or an SMTP port such as 2525). Firebase is
+still used for Google Sign-In and older Firebase-created accounts.
 
 ### Deploying the backend to Vercel
 
@@ -36,9 +38,8 @@ these settings. In MongoDB Atlas, verify the database user/password and that the
 cluster's Network Access rules permit connections from the deployment. Prefer
 restricted allowlists over opening the database to all IP addresses.
 
-The previous SMTP and Resend OTP endpoints are retained for older app builds.
-They are not called by the current mobile app; configure the corresponding mail
-provider settings only if those legacy endpoints still need to serve clients.
+OTPs are stored (hashed) in MongoDB with a TTL index, so they survive restarts
+and multiple instances. Never set `EXPOSE_DEV_OTP` on a deployed service.
 
 The backend connects to MongoDB when an API request arrives. Confirm deployment
 and database connectivity by requesting `/api/health`; a healthy response

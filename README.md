@@ -58,6 +58,10 @@ the Google sign-in configuration is used by default; override it with
 for the backend if needed. Register the Android app (`Mawaddat.App`) with both
 the development/debug and release signing certificate SHA-1 fingerprints in
 Google Cloud or Firebase, then use the resulting updated `google-services.json`.
+For iOS, configure an OAuth client for the app's bundle ID. The app reads that
+client ID from the matching iOS client entry in `google-services.json` by
+default; `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` can override it. The corresponding
+callback URL scheme is added to the iOS app during prebuild.
 Build and install the Android development app with
 `npx eas-cli@latest build --profile development --platform android`, then start
 Metro with `npx expo start --dev-client`.

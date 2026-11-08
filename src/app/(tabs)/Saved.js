@@ -1,5 +1,4 @@
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Navbar from "../../components/Navbar";
 import Categories from "../../components/home/feedshome";
@@ -62,4 +61,3 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 });
-

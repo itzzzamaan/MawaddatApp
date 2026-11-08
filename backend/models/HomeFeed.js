@@ -15,6 +15,7 @@ const HomeFeedSchema = new Schema({
   poet: Schema.Types.Mixed,
   poetId: String,
   poetName: String,
+  location: String,
   language: String,
   image: String,
   avatar: String,

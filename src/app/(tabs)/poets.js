@@ -16,6 +16,7 @@ import {
 
 import Navbar from "../../components/Navbar";
 import { getApiBase, normalizeImageUrl } from "../../utils/api";
+import SafeImage from "../../components/SafeImage";
 
 const ACCENT = "#2C1810";
 const TEXT_PRIMARY = "#2C1810";
@@ -88,12 +89,11 @@ export default function BookingScreen() {
       onPress={() => openProfile(item)}
       activeOpacity={0.9}
     >
-      <Image
-        source={{
-          uri: item.image
-            ? normalizeImageUrl(item.image)
-            : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500",
-        }}
+      <SafeImage
+        uri={
+          normalizeImageUrl(item.image) ||
+          "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500"
+        }
         style={styles.poetImage}
       />
 

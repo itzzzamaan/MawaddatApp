@@ -1,12 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+// import { useEffect, useRef, useState } from "react";
 import {
-  Animated,
   Dimensions,
-  FlatList,
-  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -22,81 +18,79 @@ const GOLD = "#C49A32";
 const DARK = "#2C1810";
 const BACKGROUND = "#F8F6F2";
 
-const SLIDES = [
-  {
-    id: "1",
-    image:
-      "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=1480&q=85",
-    title: "Every feeling deserves\na beautiful verse",
-    subtitle: "Shayari • Emotions • Stories",
-  },
-  {
-    id: "2",
-    image:
-      "https://images.unsplash.com/photo-1519682337058-a94d519337bc?auto=format&fit=crop&w=1480&q=85",
-    title: "Discover the beauty\nof timeless poetry",
-    subtitle: "Ghazals • Nazms • Poetry",
-  },
-  {
-    id: "3",
-    image:
-      "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1480&q=85",
-    title: "Your city, your stage,\nyour poetic community",
-    subtitle: "Mushairas • Open Mics • Events",
-  },
-  {
-    id: "4",
-    image:
-      "https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=1480&q=85",
-    title: "Words connect hearts\nbeyond every boundary",
-    subtitle: "Write • Share • Connect",
-  },
-];
+// const SLIDES = [
+//   {
+//     id: "1",
+//     image:
+//       "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=1480&q=85",
+//     title: "Every feeling deserves\na beautiful verse",
+//     subtitle: "Shayari • Emotions • Stories",
+//   },
+//   {
+//     id: "2",
+//     image:
+//       "https://images.unsplash.com/photo-1519682337058-a94d519337bc?auto=format&fit=crop&w=1480&q=85",
+//     title: "Discover the beauty\nof timeless poetry",
+//     subtitle: "Ghazals • Nazms • Poetry",
+//   },
+//   {
+//     id: "3",
+//     image:
+//       "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1480&q=85",
+//     title: "Your city, your stage,\nyour poetic community",
+//     subtitle: "Mushairas • Open Mics • Events",
+//   },
+//   {
+//     id: "4",
+//     image:
+//       "https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=1480&q=85",
+//     title: "Words connect hearts\nbeyond every boundary",
+//     subtitle: "Write • Share • Connect",
+//   },
+// ];
 
 export default function About() {
   const router = useRouter();
-  const sliderRef = useRef(null);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const [activeIndex, setActiveIndex] = useState(0);
+  // const sliderRef = useRef(null);
+  // const fadeAnim = useRef(new Animated.Value(1)).current;
+  // const [activeIndex, setActiveIndex] = useState(0);
 
   /* AUTO SLIDE */
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const next = (activeIndex + 1) % SLIDES.length;
+  // useEffect(() => {
+  //   const timer = setInterval(() => {
+  //     const next = (activeIndex + 1) % SLIDES.length;
 
-      sliderRef.current?.scrollToIndex({
-        index: next,
-        animated: true,
-      });
-    }, 3500);
+  //     sliderRef.current?.scrollToIndex({
+  //       index: next,
+  //       animated: true,
+  //     });
+  //   }, 3500);
 
-    return () => clearInterval(timer);
-  }, [activeIndex]);
+  //   return () => clearInterval(timer);
+  // }, [activeIndex]);
 
   /* FADE TEXT */
-  useEffect(() => {
-    fadeAnim.setValue(0);
+  // useEffect(() => {
+  //   fadeAnim.setValue(0);
 
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 700,
-      useNativeDriver: true,
-    }).start();
-  }, [activeIndex, fadeAnim]);
+  //   Animated.timing(fadeAnim, {
+  //     toValue: 1,
+  //     duration: 700,
+  //     useNativeDriver: true,
+  //   }).start();
+  // }, [activeIndex, fadeAnim]);
 
-  const onScroll = (event) => {
-    const index = Math.round(
-      event.nativeEvent.contentOffset.x / width
-    );
+  // const onScroll = (event) => {
+  //   const index = Math.round(event.nativeEvent.contentOffset.x / width);
 
-    if (index >= 0 && index < SLIDES.length && index !== activeIndex) {
-      setActiveIndex(index);
-    }
-  };
+  //   if (index >= 0 && index < SLIDES.length && index !== activeIndex) {
+  //     setActiveIndex(index);
+  //   }
+  // };
 
-  const navigateTo = (route) => {
-    router.push(route);
-  };
+  // const navigateTo = (route) => {
+  //   router.push(route);
+  // };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -121,7 +115,7 @@ export default function About() {
         contentContainerStyle={styles.scrollContent}
       >
         {/* TOP POETRY SLIDER */}
-        <View style={styles.sliderContainer}>
+        {/* <View style={styles.sliderContainer}>
           <FlatList
             ref={sliderRef}
             data={SLIDES}
@@ -183,7 +177,7 @@ export default function About() {
             )}
           />
 
-          {/* SLIDER DOTS */}
+          
           <View style={styles.dots}>
             {SLIDES.map((item, index) => (
               <Pressable
@@ -203,7 +197,7 @@ export default function About() {
               />
             ))}
           </View>
-        </View>
+        </View> */}
 
         {/* ABOUT MAWADDAT */}
         <View style={styles.content}>
@@ -218,23 +212,21 @@ export default function About() {
           </Text>
 
           <Text style={styles.paragraph}>
-            Mawaddat is a home for people who find meaning in words
-            and beauty in emotions. Discover heartfelt shayari,
-            soulful ghazals, timeless poetry, and the voices of
-            talented writers and legendary poets.
+            Mawaddat is a digital platform designed to provide Shia Islamic
+            content in one place, with a clean and seamless experience. Our goal
+            is to make it easy for you to stay connected with your faith and the
+            Ahl-e-Bait anytime, anywhere.
           </Text>
 
           <Text style={styles.paragraph}>
-            From reading verses that speak to your heart to sharing
-            your own creations and discovering poetry events in your
-            city, Mawaddat brings poetry lovers together through
-            the universal language of words.
+            From reading verses that speak to your heart to sharing your own
+            creations and discovering poetry Programs in your city, Mawaddat
+            brings poetry lovers together through the universal language of
+            words.
           </Text>
 
           {/* MAIN FEATURE CARDS */}
-          <Text style={styles.sectionHeading}>
-            Explore Mawaddat
-          </Text>
+          {/* <Text style={styles.sectionHeading}>Explore Mawaddat</Text>
 
           <View style={styles.cardGrid}>
             <FeatureCard
@@ -264,35 +256,40 @@ export default function About() {
               desc="Express yourself and share your poetry"
               onPress={() => navigateTo("/create-post")}
             />
-          </View>
+          </View> */}
 
           {/* OUR MISSION */}
           <View style={styles.section}>
             <SectionHeader
               icon="flag-outline"
-              title="Our Mission"
+              title="Key Features of Our App"
             />
 
             <Text style={styles.sectionText}>
-              Our mission is to bring poetry closer to everyone.
-              We want to create a welcoming space where emotions
-              become words, writers find their audience, and people
-              connect through shayari, ghazals, and meaningful
-              conversations.
+              1. Nearby Programs: Get complete updates and information about
+              upcoming Majalis, Juloos, and religious programs near you.{"\n"}
+              2. Poets & Shayari: Explore a rich collection of heartfelt poetry,
+              shayari, and kalam from renowned poets.{"\n"}
+              3. Reciters & Nauhakhawan: Access lyrics and collections of your
+              favorite nauhas, manqabats, and marsiyas.{"\n"}
+              4. Anjuman Kalam: Discover matami kalaam and manqabats from
+              various Anjumans in one dedicated space.{"\n"}
+              5. Scholars & Articles: Read insightful articles and valuable
+              information on Islamic history and religious topics.
             </Text>
           </View>
 
           {/* CITY-WISE EVENTS */}
-          <View style={styles.section}>
+          {/* <View style={styles.section}>
             <SectionHeader
               icon="location-outline"
               title="Poetry Events in Your City"
             />
 
             <Text style={styles.sectionText}>
-              Discover literary gatherings, mushairas, ghazal
-              evenings, open mics, poetry workshops, and cultural
-              events happening in cities across India.
+              Discover literary gatherings, mushairas, ghazal evenings, open
+              mics, poetry workshops, and cultural events happening in cities
+              across India.
             </Text>
 
             <View style={styles.eventTypes}>
@@ -325,41 +322,30 @@ export default function About() {
               style={styles.primaryButton}
               onPress={() => navigateTo("/events")}
             >
-              <Ionicons
-                name="location-outline"
-                size={19}
-                color="#FFFFFF"
-              />
+              <Ionicons name="location-outline" size={19} color="#FFFFFF" />
 
               <Text style={styles.primaryButtonText}>
                 Explore Poetry Events
               </Text>
 
-              <Ionicons
-                name="arrow-forward"
-                size={18}
-                color="#FFFFFF"
-              />
+              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
             </Pressable>
 
             <Text style={styles.helperText}>
-              Event listings and availability depend on the
-              information published for each city.
+              Event listings and availability depend on the information
+              published for each city.
             </Text>
-          </View>
+          </View> */}
 
           {/* OUR SERVICES */}
           <View style={styles.section}>
-            <SectionHeader
-              icon="apps-outline"
-              title="What You Can Do"
-            />
+            <SectionHeader icon="apps-outline" title="What You Can Do" />
 
             <View style={styles.servicesGrid}>
               <ServiceCard
                 icon="book"
                 title="Read Poetry"
-                desc="Discover words that express your feelings"
+                desc="Words that express your feelings"
               />
 
               <ServiceCard
@@ -383,41 +369,25 @@ export default function About() {
           </View>
 
           {/* WHY CHOOSE US */}
-          <View style={styles.section}>
-            <SectionHeader
-              icon="star-outline"
-              title="Why Mawaddat?"
-            />
+          {/* <View style={styles.section}>
+            <SectionHeader icon="star-outline" title="Why Mawaddat?" />
 
             <View style={styles.featuresList}>
-              <Benefit
-                text="A variety of shayari, ghazals, and poetry"
-              />
+              <Benefit text="A variety of shayari, ghazals, and poetry" />
 
-              <Benefit
-                text="Discover emerging writers and legendary poets"
-              />
+              <Benefit text="Discover emerging writers and legendary poets" />
 
-              <Benefit
-                text="Share your original poetry with the community"
-              />
+              <Benefit text="Share your original poetry with the community" />
 
-              <Benefit
-                text="Explore poetry events across different cities"
-              />
+              <Benefit text="Explore poetry events across different cities" />
 
-              <Benefit
-                text="Connect with people who share your love of words"
-              />
+              <Benefit text="Connect with people who share your love of words" />
             </View>
-          </View>
+          </View> */}
 
           {/* OUR VALUES */}
           <View style={styles.section}>
-            <SectionHeader
-              icon="heart-outline"
-              title="Our Values"
-            />
+            <SectionHeader icon="heart-outline" title="Our Values" />
 
             <View style={styles.valuesContainer}>
               <ValueCard
@@ -427,7 +397,7 @@ export default function About() {
               />
 
               <ValueCard
-                icon="feather"
+                icon="star"
                 title="Creativity"
                 desc="Celebrate original expression"
               />
@@ -460,42 +430,33 @@ export default function About() {
 
           {/* CLOSING MESSAGE */}
           <View style={styles.closingCard}>
-            <Ionicons
-              name="heart"
-              size={28}
-              color={GOLD}
-            />
+            {/* <Ionicons name="heart" size={28} color={GOLD} /> */}
 
             <Text style={styles.closingTitle}>
-              Words that bring hearts closer.
+              ​Stay connected to your faith, with Mawaddat.
             </Text>
 
             <Text style={styles.closingText}>
-              Read a verse. Write a feeling. Find your people.
-              Let your words become part of the Mawaddat story.
+              ​Mawaddat is not just an app, but a digital medium to serve
+              Azadari and share religious content. With your support and
+              feedback, we continuously strive to make this platform better.
             </Text>
 
-            <Pressable
+            {/* <Pressable
               style={styles.closingButton}
               onPress={() => navigateTo("/poets")}
             >
-              <Text style={styles.closingButtonText}>
-                Discover Poetry
-              </Text>
+              <Text style={styles.closingButtonText}>Discover Poetry</Text>
 
-              <Ionicons
-                name="arrow-forward"
-                size={17}
-                color={DARK}
-              />
-            </Pressable>
+              <Ionicons name="arrow-forward" size={17} color={DARK} />
+            </Pressable> */}
           </View>
 
           {/* FOOTER */}
-          <Text style={styles.footer}>
-            Mawaddat — a world of shayari, ghazals, poetry, and
-            meaningful connections.
-          </Text>
+          {/* <Text style={styles.footer}>
+            Mawaddat — a world of shayari, ghazals, poetry, and meaningful
+            connections.
+          </Text> */}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -503,35 +464,28 @@ export default function About() {
 }
 
 /* FEATURE CARD */
-function FeatureCard({ icon, title, desc, onPress }) {
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.card,
-        pressed && styles.cardPressed,
-      ]}
-      onPress={onPress}
-    >
-      <View style={styles.cardIcon}>
-        <Ionicons name={icon} size={24} color={GOLD} />
-      </View>
+// function FeatureCard({ icon, title, desc, onPress }) {
+//   return (
+//     <Pressable
+//       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+//       onPress={onPress}
+//     >
+//       <View style={styles.cardIcon}>
+//         <Ionicons name={icon} size={24} color={GOLD} />
+//       </View>
 
-      <Text style={styles.cardTitle}>{title}</Text>
+//       <Text style={styles.cardTitle}>{title}</Text>
 
-      <Text style={styles.cardDesc}>{desc}</Text>
+//       <Text style={styles.cardDesc}>{desc}</Text>
 
-      <View style={styles.cardFooter}>
-        <Text style={styles.cardLink}>Explore</Text>
+//       <View style={styles.cardFooter}>
+//         <Text style={styles.cardLink}>Explore</Text>
 
-        <Ionicons
-          name="arrow-forward"
-          size={15}
-          color={GOLD}
-        />
-      </View>
-    </Pressable>
-  );
-}
+//         <Ionicons name="arrow-forward" size={15} color={GOLD} />
+//       </View>
+//     </Pressable>
+//   );
+// }
 
 /* SECTION HEADER */
 function SectionHeader({ icon, title }) {
@@ -542,21 +496,6 @@ function SectionHeader({ icon, title }) {
       </View>
 
       <Text style={styles.sectionTitle}>{title}</Text>
-    </View>
-  );
-}
-
-/* EVENT CATEGORY */
-function EventType({ icon, title, desc }) {
-  return (
-    <View style={styles.eventType}>
-      <View style={styles.eventIcon}>
-        <Ionicons name={icon} size={23} color={GOLD} />
-      </View>
-
-      <Text style={styles.eventTitle}>{title}</Text>
-
-      <Text style={styles.eventDesc}>{desc}</Text>
     </View>
   );
 }
@@ -572,23 +511,6 @@ function ServiceCard({ icon, title, desc }) {
       <Text style={styles.serviceTitle}>{title}</Text>
 
       <Text style={styles.serviceDesc}>{desc}</Text>
-    </View>
-  );
-}
-
-/* BENEFIT ITEM */
-function Benefit({ text }) {
-  return (
-    <View style={styles.featureItem}>
-      <View style={styles.featureIcon}>
-        <Ionicons
-          name="checkmark-circle"
-          size={21}
-          color="#3F8F68"
-        />
-      </View>
-
-      <Text style={styles.featureText}>{text}</Text>
     </View>
   );
 }
@@ -890,7 +812,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: "800",
     color: DARK,
     marginLeft: 11,

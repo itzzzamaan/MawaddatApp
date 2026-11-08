@@ -1,4 +1,6 @@
 module.exports = {
   testEnvironment: 'node',
-  testTimeout: 20000,
+  testTimeout: 60000,
+  globalSetup: './tests/globalSetup.js',
+  globalTeardown: './tests/globalTeardown.js',
 };

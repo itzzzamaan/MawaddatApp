@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
@@ -22,11 +22,6 @@ const FAQS = [
     question: "How can I contact Mawaddat support?",
     answer:
       "You can contact our support team by emailing support.mawaddat@gmail.com. Please include a description of your issue so we can assist you.",
-  },
-  {
-    question: "How can I share my own shayari or poetry?",
-    answer:
-      "Open the poetry posting option in the app, write your shayari, ghazal, or poem, and follow the instructions on the screen to publish it.",
   },
   {
     question: "How can I find poetry events in my city?",
@@ -60,13 +55,13 @@ export default function HelpAndSupport() {
       } else {
         Alert.alert(
           "Email unavailable",
-          `Please email us directly at ${SUPPORT_EMAIL}`
+          `Please email us directly at ${SUPPORT_EMAIL}`,
         );
       }
     } catch {
       Alert.alert(
         "Contact Mawaddat",
-        `Please email us directly at ${SUPPORT_EMAIL}`
+        `Please email us directly at ${SUPPORT_EMAIL}`,
       );
     }
   };
@@ -100,23 +95,17 @@ export default function HelpAndSupport() {
         {/* HERO */}
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
-            <Ionicons
-              name="headset-outline"
-              size={38}
-              color={GOLD}
-            />
+            <Ionicons name="headset-outline" size={38} color={GOLD} />
           </View>
 
           <Text style={styles.brand}>Mawaddat</Text>
 
-          <Text style={styles.heroTitle}>
-            How can we help you?
-          </Text>
+          <Text style={styles.heroTitle}>How can we help you?</Text>
 
           <Text style={styles.heroDescription}>
-            We are here to help you enjoy your poetry journey.
-            Contact us if you need assistance with your account,
-            posts, events, or anything else about Mawaddat.
+            We are here to help you enjoy your poetry journey. Contact us if you
+            need assistance with your account, posts, events, or anything else
+            about Mawaddat.
           </Text>
 
           <Pressable
@@ -126,27 +115,15 @@ export default function HelpAndSupport() {
             ]}
             onPress={copyOrOpenEmail}
           >
-            <Ionicons
-              name="mail-outline"
-              size={20}
-              color="#FFFFFF"
-            />
-            <Text style={styles.primaryButtonText}>
-              Contact Support
-            </Text>
-            <Ionicons
-              name="arrow-forward"
-              size={18}
-              color="#FFFFFF"
-            />
+            <Ionicons name="mail-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.primaryButtonText}>Contact Support</Text>
+            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
           </Pressable>
         </View>
 
         {/* CONTACT DETAILS */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Contact Us
-          </Text>
+          <Text style={styles.sectionTitle}>Contact Us</Text>
 
           <Text style={styles.sectionDescription}>
             Get in touch with the Mawaddat support team.
@@ -160,72 +137,46 @@ export default function HelpAndSupport() {
             onPress={copyOrOpenEmail}
           >
             <View style={styles.contactIcon}>
-              <Ionicons
-                name="mail"
-                size={23}
-                color={GOLD}
-              />
+              <Ionicons name="mail" size={23} color={GOLD} />
             </View>
 
             <View style={styles.contactInfo}>
-              <Text style={styles.contactLabel}>
-                Email Support
-              </Text>
+              <Text style={styles.contactLabel}>Email Support</Text>
 
-              <Text style={styles.emailText}>
-                {SUPPORT_EMAIL}
-              </Text>
+              <Text style={styles.emailText}>{SUPPORT_EMAIL}</Text>
 
-              <Text style={styles.contactHint}>
-                Tap to open your email app
-              </Text>
+              <Text style={styles.contactHint}>Tap to open your email app</Text>
             </View>
 
-            <Ionicons
-              name="chevron-forward"
-              size={20}
-              color="#9A9186"
-            />
+            <Ionicons name="chevron-forward" size={20} color="#9A9186" />
           </Pressable>
 
           <View style={styles.contactCard}>
             <View style={styles.contactIcon}>
-              <Ionicons
-                name="chatbubbles-outline"
-                size={23}
-                color={GOLD}
-              />
+              <Ionicons name="chatbubbles-outline" size={23} color={GOLD} />
             </View>
 
             <View style={styles.contactInfo}>
-              <Text style={styles.contactLabel}>
-                What We Can Help With
-              </Text>
+              <Text style={styles.contactLabel}>What We Can Help With</Text>
 
               <Text style={styles.contactDescription}>
-                Account assistance, poetry posts, technical
-                issues, content reports, and event-related queries.
+                Account assistance, poetry posts, technical issues, content
+                reports, and event-related queries.
               </Text>
             </View>
           </View>
 
           <View style={styles.contactCard}>
             <View style={styles.contactIcon}>
-              <Ionicons
-                name="heart-outline"
-                size={23}
-                color={GOLD}
-              />
+              <Ionicons name="heart-outline" size={23} color={GOLD} />
             </View>
 
             <View style={styles.contactInfo}>
-              <Text style={styles.contactLabel}>
-                Our Community
-              </Text>
+              <Text style={styles.contactLabel}>Our Community</Text>
 
               <Text style={styles.contactDescription}>
-                We want Mawaddat to be a welcoming place for
-                shayari, ghazals, poetry, and creative expression.
+                We want Mawaddat to be a welcoming place for shayari, ghazals,
+                poetry, and creative expression.
               </Text>
             </View>
           </View>
@@ -233,9 +184,7 @@ export default function HelpAndSupport() {
 
         {/* FAQ */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Frequently Asked Questions
-          </Text>
+          <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
 
           <Text style={styles.sectionDescription}>
             Find answers to common questions.
@@ -248,31 +197,21 @@ export default function HelpAndSupport() {
               <View key={faq.question} style={styles.faqItem}>
                 <Pressable
                   style={styles.faqQuestion}
-                  onPress={() =>
-                    setExpandedFaq(isExpanded ? null : index)
-                  }
+                  onPress={() => setExpandedFaq(isExpanded ? null : index)}
                   accessibilityRole="button"
                   accessibilityState={{ expanded: isExpanded }}
                 >
-                  <Text style={styles.questionText}>
-                    {faq.question}
-                  </Text>
+                  <Text style={styles.questionText}>{faq.question}</Text>
 
                   <Ionicons
-                    name={
-                      isExpanded
-                        ? "chevron-up"
-                        : "chevron-down"
-                    }
+                    name={isExpanded ? "chevron-up" : "chevron-down"}
                     size={20}
                     color={GOLD}
                   />
                 </Pressable>
 
                 {isExpanded && (
-                  <Text style={styles.answerText}>
-                    {faq.answer}
-                  </Text>
+                  <Text style={styles.answerText}>{faq.answer}</Text>
                 )}
               </View>
             );
@@ -281,15 +220,9 @@ export default function HelpAndSupport() {
 
         {/* FINAL SUPPORT CTA */}
         <View style={styles.bottomCard}>
-          <Ionicons
-            name="mail-unread-outline"
-            size={30}
-            color={GOLD}
-          />
+          <Ionicons name="mail-unread-outline" size={30} color={GOLD} />
 
-          <Text style={styles.bottomTitle}>
-            Still need help?
-          </Text>
+          <Text style={styles.bottomTitle}>Still need help?</Text>
 
           <Text style={styles.bottomDescription}>
             Send us an email and tell us how we can assist you.
@@ -300,9 +233,7 @@ export default function HelpAndSupport() {
               styles.secondaryButton,
               pressed && styles.buttonPressed,
             ]}
-            onPress={() =>
-              openEmail("Help and Support - Mawaddat")
-            }
+            onPress={() => openEmail("Help and Support - Mawaddat")}
           >
             <Text style={styles.secondaryButtonText}>
               Email Mawaddat Support

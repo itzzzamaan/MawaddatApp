@@ -9,7 +9,12 @@ const getFirebaseAdminApp = () => {
   const existingApp = getApps().find((app) => app.name === "[DEFAULT]");
   if (existingApp) return existingApp;
 
-  const credentialJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  // Hosting dashboards often mangle multi-line JSON; accept a base64 copy as an alternative.
+  const credentialJson =
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
+    (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64
+      ? Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8")
+      : "");
   const credentialPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (!credentialJson && !credentialPath) {
     const error = new Error("Firebase Admin credentials are not configured.");
@@ -26,6 +31,17 @@ const getFirebaseAdminApp = () => {
       error.code = "FIREBASE_ADMIN_INVALID_CONFIGURATION";
       throw error;
     }
+  }
+
+  if (
+    serviceAccount?.project_id &&
+    process.env.FIREBASE_PROJECT_ID &&
+    serviceAccount.project_id !== process.env.FIREBASE_PROJECT_ID
+  ) {
+    // A mismatch makes every ID token from the app fail verification (wrong audience).
+    console.warn(
+      "FIREBASE_PROJECT_ID does not match the service account's project_id; Firebase ID tokens will be rejected.",
+    );
   }
 
   const credential = serviceAccount ? cert(serviceAccount) : applicationDefault();

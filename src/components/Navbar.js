@@ -23,6 +23,7 @@ import { getApiBase } from "../utils/api";
 import {
   registerPushDevice,
   syncFollowedPoets,
+  syncUserLocation,
 } from "../utils/notifications";
 import Sidebar from "./Sidebar";
 
@@ -38,7 +39,7 @@ export default function Navbar() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { locationName } = useCurrentLocation();
+  const { locationName, currentCity } = useCurrentLocation();
   const { followedPoets } = useSavedPosts();
   const pushSetupUser = useRef(null);
 
@@ -70,6 +71,7 @@ export default function Navbar() {
           }
 
           await syncFollowedPoets(followedPoets, token);
+          await syncUserLocation(currentCity, token);
           await refreshUnreadCount();
 
           if (pushSetupUser.current !== token) {
@@ -94,7 +96,7 @@ export default function Navbar() {
         active = false;
         notificationListener.remove();
       };
-    }, [followedPoets]),
+    }, [currentCity, followedPoets]),
   );
 
   return (

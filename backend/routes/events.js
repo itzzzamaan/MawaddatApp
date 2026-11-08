@@ -1,7 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const Event = require("../models/Event");
-const { notifyAllUsersAboutEvent } = require("../notificationService");
+const {
+  notifyUsersAboutEvent,
+  normalizeNotificationCity,
+} = require("../notificationService");
 const auth = require("../middleware/auth");
 const adminOnly = require("../middleware/adminOnly");
 const { saveImageAsset } = require("../database");
@@ -13,11 +16,15 @@ const normalizeStoredImagePath = (value) => {
   const normalized = value.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
   if (!normalized) return "";
   if (/^https?:\/\//i.test(normalized)) {
-    const match = normalized.match(/(?:^|\/uploads\/)([^/?#]+\.(?:jpe?g|png|webp))$/i);
+    const match = normalized.match(
+      /(?:^|\/uploads\/)([^/?#]+\.(?:jpe?g|png|webp))$/i,
+    );
     return match ? `/uploads/${match[1]}` : "";
   }
 
-  const filename = normalized.match(/(?:^|\/uploads\/)([^/?#]+\.(?:jpe?g|png|webp))$/i)?.[1] || normalized.split("/").filter(Boolean).pop();
+  const filename =
+    normalized.match(/(?:^|\/uploads\/)([^/?#]+\.(?:jpe?g|png|webp))$/i)?.[1] ||
+    normalized.split("/").filter(Boolean).pop();
   if (!filename || !/\.(jpe?g|png|webp)$/i.test(filename)) return "";
   return `/uploads/${filename}`;
 };
@@ -101,7 +108,9 @@ const normalizeEventBody = (body = {}) => {
 const getSafeImageFilename = (value) => {
   if (!value || typeof value !== "string") return "";
   const normalized = value.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
-  const pathPart = normalized.includes("/uploads/") ? normalized.split("/uploads/").pop() : normalized;
+  const pathPart = normalized.includes("/uploads/")
+    ? normalized.split("/uploads/").pop()
+    : normalized;
   const filename = pathPart.split("/").filter(Boolean).pop();
   return filename && /\.(jpe?g|png|webp)$/i.test(filename) ? filename : "";
 };
@@ -119,8 +128,11 @@ const normalizePublicImageUrl = (value, req) => {
 
 const serializeEvent = (item, req) => {
   if (!item) return item;
-  const data = { ...item.toObject ? item.toObject() : item };
-  data.image = normalizePublicImageUrl(normalizeStoredImagePath(data.image), req);
+  const data = { ...(item.toObject ? item.toObject() : item) };
+  data.image = normalizePublicImageUrl(
+    normalizeStoredImagePath(data.image),
+    req,
+  );
   return data;
 };
 
@@ -135,6 +147,7 @@ router.post("/", auth, adminOnly, upload.single("image"), async (req, res) => {
   try {
     const body = normalizeEventBody(req.body || {});
     await applyStoredImageFields(body, req.file);
+    body.location = normalizeNotificationCity(body.location);
 
     if (!body.image) {
       return res.status(400).json({
@@ -153,7 +166,7 @@ router.post("/", auth, adminOnly, upload.single("image"), async (req, res) => {
 
     const item = new Event(body);
     await item.save();
-    await notifyAllUsersAboutEvent(item);
+    await notifyUsersAboutEvent(item);
 
     return res.status(201).json({
       success: true,
@@ -183,6 +196,9 @@ router.put("/:id", auth, upload.single("image"), async (req, res) => {
   try {
     const body = normalizeEventBody(req.body || {});
     await applyStoredImageFields(body, req.file);
+    if (Object.prototype.hasOwnProperty.call(body, "location")) {
+      body.location = normalizeNotificationCity(body.location);
+    }
     if (body.image) body.image = normalizeStoredImagePath(body.image);
     const item = await Event.findByIdAndUpdate(req.params.id, body, {
       new: true,

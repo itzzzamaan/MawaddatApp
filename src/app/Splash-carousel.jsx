@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../constants/theme";
 import { getApiBase, normalizeImageUrl } from "../utils/api";
+import SafeImage from "../components/SafeImage";
 
 const { width } = Dimensions.get("window");
 
@@ -112,13 +113,9 @@ export default function SplashCarousel() {
     const visibleSocials = Object.entries(socialLinks).filter(
       ([, value]) => typeof value === "string" && value.trim().length > 0,
     );
-    const imageSource = item.image
-      ? { uri: normalizeImageUrl(item.image) }
-      : null;
-
     return (
-      <ImageBackground
-        source={imageSource}
+      <SafeImage
+        uri={normalizeImageUrl(item.image)}
         style={styles.slide}
         resizeMode="cover"
       >
@@ -183,7 +180,7 @@ export default function SplashCarousel() {
             />
           ))}
         </View>
-      </ImageBackground>
+      </SafeImage>
     );
   };
 

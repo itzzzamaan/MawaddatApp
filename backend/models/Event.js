@@ -8,6 +8,7 @@ const EventSchema = new Schema({
   date: String,
   time: String,
   venue: String,
+  location: String,
   completeAddress: String,
   mapsLink: String,
   host: String,

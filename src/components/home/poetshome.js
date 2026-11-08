@@ -16,6 +16,7 @@ import {
 } from "react-native-responsive-screen";
 
 import { getApiBase, normalizeImageUrl } from "../../utils/api";
+import SafeImage from "../SafeImage";
 
 
 export default function Explore() {
@@ -119,12 +120,11 @@ export default function Explore() {
             style={styles.item}
           >
             <View style={styles.imageWrapper}>
-              <Image
-                source={{
-                  uri: item.image
-                    ? normalizeImageUrl(item.image)
-                    : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500",
-                }}
+              <SafeImage
+                uri={
+                  normalizeImageUrl(item.image) ||
+                  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500"
+                }
                 style={styles.image}
               />
             </View>

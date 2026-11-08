@@ -3,24 +3,24 @@
  * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
  */
 
-import '@/global.css';
+// import "@/global.css";
 
-import { Platform } from 'react-native';
+import { Platform } from "react-native";
 
 export const Colors = {
   light: {
-    text: '#2C1810',
-    background: '#F8F6F2',
-    backgroundElement: '#F0EAE3',
-    backgroundSelected: '#E9DCC7',
-    textSecondary: '#5B493D',
+    text: "#2C1810",
+    background: "#F8F6F2",
+    backgroundElement: "#F0EAE3",
+    backgroundSelected: "#E9DCC7",
+    textSecondary: "#5B493D",
   },
   dark: {
-    text: '#F8F6F2',
-    background: '#2C1810',
-    backgroundElement: '#3B2A20',
-    backgroundSelected: '#4C392E',
-    textSecondary: '#D9CFC0',
+    text: "#F8F6F2",
+    background: "#2C1810",
+    backgroundElement: "#3B2A20",
+    backgroundSelected: "#4C392E",
+    textSecondary: "#D9CFC0",
   },
 } as const;
 
@@ -29,25 +29,25 @@ export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
+    sans: "system-ui",
     /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
+    serif: "ui-serif",
     /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
+    rounded: "ui-rounded",
     /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+    mono: "ui-monospace",
   },
   default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
+    sans: "normal",
+    serif: "serif",
+    rounded: "normal",
+    mono: "monospace",
   },
   web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
+    sans: "var(--font-display)",
+    serif: "var(--font-serif)",
+    rounded: "var(--font-rounded)",
+    mono: "var(--font-mono)",
   },
 });
 

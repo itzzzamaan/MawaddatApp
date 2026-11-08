@@ -1,22 +1,19 @@
-
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
-  ScrollView,
   StyleSheet,
-  TouchableOpacity,
   Text,
   TextInput,
-  View,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Navbar from "../../components/Navbar";
-import { Colors } from "../../constants/theme";
+import SafeImage from "../../components/SafeImage";
 import { useCurrentLocation } from "../../contexts/LocationContext";
 import { useSavedPosts } from "../../contexts/SavedPostsContext";
 import { getApiBase, normalizeImageUrl } from "../../utils/api";
@@ -31,15 +28,7 @@ const CARD_BG = "#FFFCF8";
 const PANEL = "#EFE5D8";
 const BORDER = "#E8DCCF";
 
-const CATEGORIES = [
-  "All",
-  "Love",
-  "Sad",
-  "Friendship",
-  "Motivational",
-  "Life",
-  "Ghazal",
-];
+const DEFAULT_CATEGORIES = ["Majlis", "Mehfil", "Shabbedari"];
 
 const SHADOW = {
   shadowColor: "#2C1810",
@@ -52,19 +41,15 @@ const SHADOW = {
 function EventCard({ item, favorite, onFavorite, onPress }) {
   return (
     <Pressable
-      style={({ pressed }) => [
-        styles.eventCard,
-        pressed && styles.cardPressed,
-      ]}
+      style={({ pressed }) => [styles.eventCard, pressed && styles.cardPressed]}
       onPress={onPress}
     >
       <View style={styles.imageContainer}>
-        <Image
-          source={{
-            uri: item.image
-              ? normalizeImageUrl(item.image)
-              : "https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=1200",
-          }}
+        <SafeImage
+          uri={
+            normalizeImageUrl(item.image) ||
+            "https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=1200"
+          }
           style={styles.eventImage}
           resizeMode="cover"
         />
@@ -90,9 +75,7 @@ function EventCard({ item, favorite, onFavorite, onPress }) {
           }}
           accessibilityRole="button"
           accessibilityLabel={
-            favorite
-              ? "Remove event from favorites"
-              : "Add event to favorites"
+            favorite ? "Remove event from favorites" : "Add event to favorites"
           }
         >
           <Ionicons
@@ -112,17 +95,12 @@ function EventCard({ item, favorite, onFavorite, onPress }) {
         </View>
       </View>
 
-      <View style={styles.cardContent}>      
-
+      <View style={styles.cardContent}>
         {/* Date and time stay on the same line */}
         <View style={styles.dateTimeRow}>
           <View style={styles.dateTimeItem}>
             <View style={styles.infoIconBox}>
-              <Ionicons
-                name="calendar-outline"
-                size={16}
-                color={ACCENT}
-              />
+              <Ionicons name="calendar-outline" size={16} color={ACCENT} />
             </View>
             <View style={styles.dateTimeTextContainer}>
               <Text style={styles.infoLabel}>DATE</Text>
@@ -199,12 +177,21 @@ export default function ShayariEvents() {
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [heroPressed, setHeroPressed] = useState(false);
-    const [searchQuery, setSearchQuery] = useState("");
-  
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
 
   const { currentCity } = useCurrentLocation();
-  const { savedPrograms, toggleSavedProgram, isProgramSaved } =
-    useSavedPosts();
+  const { savedPrograms, toggleSavedProgram, isProgramSaved } = useSavedPosts();
+
+  const categories = useMemo(
+    () => [
+      "All",
+      ...new Set([
+        ...DEFAULT_CATEGORIES,
+        ...events.map((item) => item.category?.trim()).filter(Boolean),
+      ]),
+    ],
+    [events],
+  );
 
   useEffect(() => {
     let active = true;
@@ -241,8 +228,9 @@ export default function ShayariEvents() {
     const query = search.trim().toLowerCase();
 
     return events.filter((item) => {
-      // Without a detected city (web, permission denied) show every event.
+      // "All" means every event; other categories stay scoped to the current city.
       const matchesCity =
+        activeCategory === "All" ||
         !currentCity ||
         (item.venue || "").toLowerCase().includes(currentCity.toLowerCase());
 
@@ -258,12 +246,7 @@ export default function ShayariEvents() {
       const matchesFavorite =
         !favoritesOnly || isProgramSaved(item._id || item.id);
 
-      return (
-        matchesCity &&
-        matchesCategory &&
-        matchesSearch &&
-        matchesFavorite
-      );
+      return matchesCity && matchesCategory && matchesSearch && matchesFavorite;
     });
   }, [
     activeCategory,
@@ -301,29 +284,25 @@ export default function ShayariEvents() {
           ListHeaderComponent={
             <View>
               <TouchableOpacity
-                               activeOpacity={0.9}
-                               onPress={() => {
-                                 setActiveCategory("All");
-                                 setSearchQuery("");
-                               }}
-                               onPressIn={() => setHeroPressed(true)}
-                               onPressOut={() => setHeroPressed(false)}
-                               style={[styles.hero, heroPressed && styles.heroPressed]}
-                             >
-                               <Text style={styles.heroTitle}>Explore Programs</Text>
-                               <Text style={styles.heroDescription}>
-                                 Discover legendary voices and literary figures whose words
-                                 continue to inspire generations.
-                               </Text>
-                             </TouchableOpacity>
+                activeOpacity={0.9}
+                onPress={() => {
+                  setActiveCategory("All");
+                  setSearch("");
+                }}
+                onPressIn={() => setHeroPressed(true)}
+                onPressOut={() => setHeroPressed(false)}
+                style={[styles.hero, heroPressed && styles.heroPressed]}
+              >
+                <Text style={styles.heroTitle}>Explore Programs</Text>
+                <Text style={styles.heroDescription}>
+                  Discover legendary voices and literary figures whose words
+                  continue to inspire generations.
+                </Text>
+              </TouchableOpacity>
 
               <View style={styles.searchBox}>
                 <View style={styles.searchIconBox}>
-                  <Ionicons
-                    name="search-outline"
-                    size={20}
-                    color={BROWN}
-                  />
+                  <Ionicons name="search-outline" size={20} color={BROWN} />
                 </View>
 
                 <TextInput
@@ -343,58 +322,73 @@ export default function ShayariEvents() {
                     style={styles.clearSearchButton}
                     accessibilityLabel="Clear search"
                   >
-                    <Ionicons
-                      name="close-circle"
-                      size={19}
-                      color="#998879"
-                    />
+                    <Ionicons name="close-circle" size={19} color="#998879" />
                   </Pressable>
                 )}
               </View>
 
               <View style={styles.categoryHeader}>
-                <Text style={styles.categoryHeading}>Browse by mood</Text>
-                <Text style={styles.categoryHint}>Choose your vibe</Text>
+                <Text style={styles.categoryHeading}>Browse categories</Text>
+                <Text style={styles.categoryHint}>Choose a program type</Text>
               </View>
 
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoryRow}
+              <Pressable
+                style={styles.categoryDropdown}
+                onPress={() => setCategoryMenuOpen((open) => !open)}
+                accessibilityRole="button"
+                accessibilityLabel={`Category: ${activeCategory}`}
+                accessibilityState={{ expanded: categoryMenuOpen }}
               >
-                {CATEGORIES.map((category) => {
-                  const selected = activeCategory === category;
+                <Text style={styles.categoryDropdownText}>
+                  {activeCategory}
+                </Text>
+                <Ionicons
+                  name={categoryMenuOpen ? "chevron-up" : "chevron-down"}
+                  size={19}
+                  color={BROWN}
+                />
+              </Pressable>
 
-                  return (
-                    <Pressable
-                      key={category}
-                      onPress={() => setActiveCategory(category)}
-                      style={({ pressed }) => [
-                        styles.categoryButton,
-                        selected && styles.categoryButtonActive,
-                        pressed && styles.categoryPressed,
-                      ]}
-                    >
-                      {selected && (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={14}
-                          color={CREAM}
-                        />
-                      )}
+              {categoryMenuOpen && (
+                <View style={styles.categoryMenu}>
+                  {categories.map((category) => {
+                    const selected = activeCategory === category;
 
-                      <Text
-                        style={[
-                          styles.categoryText,
-                          selected && styles.categoryTextActive,
+                    return (
+                      <Pressable
+                        key={category}
+                        onPress={() => {
+                          setActiveCategory(category);
+                          setCategoryMenuOpen(false);
+                        }}
+                        style={({ pressed }) => [
+                          styles.categoryOption,
+                          selected && styles.categoryOptionSelected,
+                          pressed && styles.categoryPressed,
                         ]}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
                       >
-                        {category}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+                        <Text
+                          style={[
+                            styles.categoryOptionText,
+                            selected && styles.categoryTextActive,
+                          ]}
+                        >
+                          {category}
+                        </Text>
+                        {selected && (
+                          <Ionicons
+                            name="checkmark"
+                            size={18}
+                            color={CREAM}
+                          />
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
 
               <View style={styles.resultsHeader}>
                 <View>
@@ -408,11 +402,7 @@ export default function ShayariEvents() {
                   </Text>
                 </View>
 
-                <Ionicons
-                  name="sparkles-outline"
-                  size={22}
-                  color={ACCENT}
-                />
+                <Ionicons name="sparkles-outline" size={22} color={ACCENT} />
               </View>
             </View>
           }
@@ -421,7 +411,9 @@ export default function ShayariEvents() {
               <View style={styles.emptyBox}>
                 <View style={styles.emptyIconCircle}>
                   <Ionicons
-                    name={loadError ? "cloud-offline-outline" : "calendar-outline"}
+                    name={
+                      loadError ? "cloud-offline-outline" : "calendar-outline"
+                    }
                     size={32}
                     color={BROWN}
                   />
@@ -498,19 +490,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: PAGE_BG,
     marginTop: -31,
-    
   },
 
   page: {
-    marginBottom: 94,
+    flex: 1,
+    minHeight: 0,
     backgroundColor: PAGE_BG,
     paddingHorizontal: 16,
     paddingTop: 8,
   },
 
-  
+  listContent: {
+    paddingBottom: 18,
+  },
 
- hero: {
+  hero: {
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 12,
@@ -525,7 +519,12 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.985 }],
     backgroundColor: "#EFE5DB",
   },
-  heroTitle: { fontSize: 24, fontWeight: "800", color: TEXT_PRIMARY, letterSpacing: 0.15 },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: TEXT_PRIMARY,
+    letterSpacing: 0.15,
+  },
   heroDescription: {
     color: TEXT_MUTED,
     marginTop: 6,
@@ -597,7 +596,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: BROWN,
-    
+
     paddingHorizontal: 10,
     fontSize: 12,
   },
@@ -626,28 +625,46 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  categoryRow: {
-    paddingBottom: 21,
-    paddingRight: 5,
-    gap: 8,
-  },
-
-  categoryButton: {
+  categoryDropdown: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
+    justifyContent: "space-between",
     backgroundColor: CARD_BG,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 30,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderRadius: 13,
     borderWidth: 1,
     borderColor: BORDER,
+    marginBottom: 12,
   },
 
-  categoryButtonActive: {
+  categoryDropdownText: {
+    color: BROWN,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  categoryMenu: {
+    backgroundColor: CARD_BG,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: BORDER,
+    overflow: "hidden",
+    marginBottom: 18,
+  },
+
+  categoryOption: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+
+  categoryOptionSelected: {
     backgroundColor: BROWN,
-    borderColor: BROWN,
   },
 
   categoryPressed: {
@@ -655,9 +672,9 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.97 }],
   },
 
-  categoryText: {
+  categoryOptionText: {
     color: BROWN,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
 

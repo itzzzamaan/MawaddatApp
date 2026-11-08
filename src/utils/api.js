@@ -1,4 +1,6 @@
 import { Platform } from "react-native";
+import { fetch as expoFetch } from "expo/fetch";
+import { File } from "expo-file-system";
 
 export const getApiBase = () => {
   const configuredUrl =
@@ -32,6 +34,10 @@ export const normalizeImageUrl = (value) => {
   if (!value || typeof value !== "string") return "";
   const trimmed = value.trim();
   if (!trimmed) return "";
+
+  // Device-local URIs (picker results) are meaningless to other users. Never rewrite them
+  // into a server URL that 404s; return "" so the UI shows its fallback instead.
+  if (/^(file|content|ph|assets-library|blob|data):/i.test(trimmed)) return "";
 
   const cleaned = trimmed.replace(/\\/g, "/").replace(/\/+/g, "/");
 
@@ -91,15 +97,13 @@ export const uploadImageToApi = async ({
     }
     formData.append("image", blob, fileName);
   } else {
-    // Picker URIs can be extensionless (content://...); give the file part a
-    // valid image extension so the multipart headers are well-formed.
-    if (!/\.(jpe?g|png|webp)$/i.test(fileName)) {
-      fileName = `${fileName.replace(/\.[^.]*$/, "") || "upload"}.jpg`;
-    }
-    formData.append("image", { uri, name: fileName, type: mimeType });
+    // SDK 58: global FormData/fetch is WinterCG-style; it needs a File/Blob part,
+    // not the old React Native `{ uri, name, type }` object.
+    formData.append("image", new File(uri));
   }
 
-  const uploadResponse = await fetch(`${apiBase}/api/uploads`, {
+  const doFetch = Platform.OS === "web" ? fetch : expoFetch;
+  const uploadResponse = await doFetch(`${apiBase}/api/uploads`, {
     method: "POST",
     headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
     body: formData,
@@ -107,11 +111,19 @@ export const uploadImageToApi = async ({
 
   if (!uploadResponse.ok) {
     const text = await uploadResponse.text();
-    throw new Error(text || "Image upload failed");
+    let message = "";
+    try {
+      message = JSON.parse(text)?.message || "";
+    } catch {
+      // Non-JSON error body (e.g. an HTML error page from a proxy).
+    }
+    throw new Error(message || `Image upload failed (HTTP ${uploadResponse.status}).`);
   }
 
-  const json = await uploadResponse.json();
-  return json?.path || null;
+  const json = await parseApiResponse(uploadResponse);
+  // Never report success without a permanent path: callers would save a record with no image.
+  if (!json?.path) throw new Error("The server did not return an image path.");
+  return json.path;
 };
 
 export default getApiBase;

@@ -15,30 +15,13 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getApiBase } from "../utils/api";
+import { getApiBase, normalizeImageUrl } from "../utils/api";
+import SafeImage from "../components/SafeImage";
 
 const ACCENT = "#2C1810";
 const BACKGROUND = "#F7F2EC";
 const MUTED = "#7E6A5A";
 const CARD_BORDER = "#EEE1D7";
-
-const normalizeImageUrl = (value) => {
-  if (!value || typeof value !== "string") return "";
-
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-
-  const cleaned = trimmed.replace(/\\/g, "/");
-  const filename = cleaned.includes("/uploads/")
-    ? cleaned.split("/uploads/").pop()
-    : cleaned.split("/").filter(Boolean).pop();
-
-  if (!filename) return "";
-
-  return `${getApiBase()}/uploads/${filename}`;
-};
 
 const getStaticMapUrl = (event) => {
   const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -119,14 +102,48 @@ export default function ShayariEventDetails() {
     }
   };
 
-  const handleRegisterInterest = () => {
+  const handleRegisterInterest = async () => {
     if (!event) return;
 
-    Alert.alert(
-      "Interested in this event?",
-      `You've selected ${event.title}. Connect with the event organizer at the venue or through your app's registration service to confirm attendance.`,
-      [{ text: "OK" }]
-    );
+    const subject = `Program Enquiry: ${event.title || "Mawaddat Program"}`;
+    const body = [
+      "Hello Mawaddat Events Team,",
+      "",
+      "I would like to enquire about registering for this program:",
+      "",
+      `Program: ${event.title || "Not specified"}`,
+      `Category: ${event.category || "Not specified"}`,
+      `Date: ${event.date || "To be announced"}`,
+      `Time: ${event.time || "To be announced"}`,
+      `Venue: ${event.venue || "To be announced"}`,
+      `Address: ${event.completeAddress || event.venue || "To be announced"}`,
+      `Host: ${event.host || "Not specified"}`,
+      "",
+      "Please share the registration process, availability, and any fees or other details I should know.",
+      "",
+      "My details:",
+      "Full name:",
+      "Phone number:",
+      "Email address:",
+      "Number of attendees:",
+      "",
+      "Thank you,",
+      "[Your name]",
+    ].join("\n");
+    const emailUrl =
+      `mailto:event.mawaddat@gmail.com` +
+      `?subject=${encodeURIComponent(subject)}` +
+      `&body=${encodeURIComponent(body)}`;
+
+    try {
+      await Linking.openURL(emailUrl);
+    } catch (error) {
+      console.error("Could not open program enquiry email:", error);
+      Alert.alert(
+        "Email unavailable",
+        "Please email event.mawaddat@gmail.com with your program enquiry."
+      );
+    }
   };
 
   const handleOpenMaps = async () => {
@@ -207,11 +224,7 @@ export default function ShayariEventDetails() {
       >
         {/* Hero */}
         <View style={styles.heroContainer}>
-          <Image
-            source={{ uri: heroImage }}
-            style={styles.heroImage}
-            resizeMode="cover"
-          />
+          <SafeImage uri={heroImage} style={styles.heroImage} resizeMode="cover" />
 
           <View style={styles.heroShade} />
 

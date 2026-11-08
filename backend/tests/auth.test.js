@@ -3,6 +3,7 @@ const app = require('../app');
 const mongoose = require('mongoose');
 const { connectToDatabase } = require('../database');
 const User = require('../models/User');
+const Admin = require('../models/Admin');
 const bcrypt = require('bcrypt');
 const { OAuth2Client } = require('google-auth-library');
 const firebaseAuth = require('firebase-admin/auth');
@@ -10,6 +11,12 @@ const firebaseAdmin = require('../firebaseAdmin');
 
 beforeAll(async () => {
   await connectToDatabase();
+  // Tests run against an empty in-memory database, so seed the admin they log in with.
+  await Admin.create({
+    email: 'admin@test.com',
+    name: 'Test Admin',
+    password: await bcrypt.hash('test1234', 4),
+  });
 });
 
 afterAll(async () => {
@@ -19,14 +26,17 @@ afterAll(async () => {
 describe('Auth', () => {
   it('should send signup OTP through the configured HTTPS email provider', async () => {
     const originalFetch = global.fetch;
-    const originalApiKey = process.env.RESEND_API_KEY;
+    const originalApiKey = process.env.BREVO_API_KEY;
     const originalFrom = process.env.SMTP_FROM;
     const originalSmtpUser = process.env.SMTP_USER;
     const originalSmtpPassword = process.env.SMTP_PASS;
+    const originalEmailFrom = process.env.EMAIL_FROM;
+    // EMAIL_FROM (set in a developer's local .env) takes precedence over SMTP_FROM.
+    delete process.env.EMAIL_FROM;
     let requestUrl;
     let requestBody;
 
-    process.env.RESEND_API_KEY = 'test-resend-key';
+    process.env.BREVO_API_KEY = 'test-brevo-key';
     process.env.SMTP_FROM = 'Mawaddat <otp@example.com>';
     delete process.env.SMTP_USER;
     delete process.env.SMTP_PASS;
@@ -43,14 +53,16 @@ describe('Auth', () => {
         .send({ name: 'OTP Provider Test', email, password: 'test-password' });
 
       expect(res.statusCode).toBe(200);
-      expect(requestUrl).toBe('https://api.resend.com/emails');
-      expect(requestBody.from).toBe('Mawaddat <otp@example.com>');
-      expect(requestBody.to).toBe(email);
-      expect(requestBody.html).toContain(res.body.otp);
+      expect(requestUrl).toBe('https://api.brevo.com/v3/smtp/email');
+      expect(requestBody.sender).toEqual({ name: 'Mawaddat', email: 'otp@example.com' });
+      expect(requestBody.to).toEqual([{ email }]);
+      expect(requestBody.htmlContent).toContain(res.body.otp);
     } finally {
       global.fetch = originalFetch;
-      if (originalApiKey === undefined) delete process.env.RESEND_API_KEY;
-      else process.env.RESEND_API_KEY = originalApiKey;
+      if (originalApiKey === undefined) delete process.env.BREVO_API_KEY;
+      else process.env.BREVO_API_KEY = originalApiKey;
+      if (originalEmailFrom === undefined) delete process.env.EMAIL_FROM;
+      else process.env.EMAIL_FROM = originalEmailFrom;
       if (originalFrom === undefined) delete process.env.SMTP_FROM;
       else process.env.SMTP_FROM = originalFrom;
       if (originalSmtpUser === undefined) delete process.env.SMTP_USER;

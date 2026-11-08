@@ -13,9 +13,32 @@ import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import {
   completeFirebaseSignIn,
+  completeGoogleSignIn,
   getFirebaseAuthApi,
   getFirebaseAuthErrorMessage,
 } from "../utils/firebaseAuth";
+
+// Firebase is the primary path (links the Firebase uid). If the Firebase step cannot run
+// (module missing, provider disabled, Admin SDK not configured on the backend) the Google
+// ID token is exchanged directly via /api/auth/google. Both link accounts by email, so a
+// returning user never gets a duplicate record. Connectivity errors are not retried.
+async function signInToMawaddat(googleIdToken) {
+  try {
+    const firebaseAuth = await getFirebaseAuthApi();
+    const credential = firebaseAuth.GoogleAuthProvider.credential(googleIdToken);
+    const { user } = await firebaseAuth.signInWithCredential(firebaseAuth.getAuth(), credential);
+    await completeFirebaseSignIn(user);
+  } catch (firebaseError) {
+    if (
+      firebaseError?.code === "BACKEND_UNREACHABLE" ||
+      firebaseError?.code === "auth/network-request-failed"
+    ) {
+      throw firebaseError;
+    }
+    console.warn("Firebase Google sign-in failed, using backend Google verification:", firebaseError?.code || firebaseError?.name);
+    await completeGoogleSignIn(googleIdToken);
+  }
+}
 
 const GoogleAuthButton = () => {
   const router = useRouter();
@@ -29,9 +52,16 @@ const GoogleAuthButton = () => {
     }
 
     const webClientId = Constants.expoConfig?.extra?.googleWebClientId;
+    const iosClientId = Constants.expoConfig?.extra?.googleIosClientId;
     if (!webClientId) {
       setError(
         "Google sign-in is not configured yet. Add the Google Web OAuth client ID to the app and backend environment.",
+      );
+      return;
+    }
+    if (Platform.OS === "ios" && !iosClientId) {
+      setError(
+        "Google sign-in is not configured for iOS. Add the iOS OAuth client ID for this app's bundle identifier.",
       );
       return;
     }
@@ -53,7 +83,10 @@ const GoogleAuthButton = () => {
         isNoSavedCredentialFoundResponse,
         isSuccessResponse,
       } = await import("react-native-nitro-google-signin");
-      GoogleOneTapSignIn.configure({ webClientId });
+      GoogleOneTapSignIn.configure({
+        webClientId,
+        ...(Platform.OS === "ios" ? { iosClientId } : {}),
+      });
       await GoogleOneTapSignIn.checkPlayServices();
 
       let result = await GoogleOneTapSignIn.signIn();
@@ -63,26 +96,38 @@ const GoogleAuthButton = () => {
       if (isNoSavedCredentialFoundResponse(result)) {
         result = await GoogleOneTapSignIn.presentExplicitSignIn();
       }
-      if (isCancelledResponse(result)) return;
+      if (isCancelledResponse(result)) {
+        // Android also reports a *misconfigured* OAuth client (missing SHA-1 / Android
+        // client) as "cancelled" after the account is picked, so never fail silently.
+        console.warn(
+          "Google sign-in returned 'cancelled'. If an account was selected, check the Android OAuth client (package name + SHA-1) in Firebase/Google Cloud.",
+        );
+        setError(
+          "Google sign-in didn't complete. Please try again. If you picked an account and this keeps happening, the app's Google configuration needs attention.",
+        );
+        return;
+      }
       if (!isSuccessResponse(result) || !result.data.idToken) {
         throw new Error(
           "Google did not return an ID token. Check the Web OAuth client configuration.",
         );
       }
 
-      const firebaseAuth = await getFirebaseAuthApi();
-      const credential = firebaseAuth.GoogleAuthProvider.credential(
-        result.data.idToken,
-      );
-      const auth = firebaseAuth.getAuth();
-      const { user } = await firebaseAuth.signInWithCredential(auth, credential);
-      await completeFirebaseSignIn(user);
+      await signInToMawaddat(result.data.idToken);
       router.replace("/Splash-carousel");
     } catch (signInError) {
-      if (
-        signInError?.code === "SIGN_IN_CANCELLED" ||
-        signInError?.code === "CANCELLED"
-      ) {
+      if (signInError?.code === "SIGN_IN_CANCELLED" || signInError?.code === "CANCELLED") {
+        return;
+      }
+
+      if (signInError?.code === "DEVELOPER_ERROR") {
+        setError(
+          "Google sign-in isn't set up for this build yet (missing SHA-1 / OAuth client). Please contact support.",
+        );
+        return;
+      }
+      if (signInError?.code === "PLAY_SERVICES_NOT_AVAILABLE") {
+        setError("Google Play Services is missing or out of date on this device.");
         return;
       }
 

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getApiBase, normalizeImageUrl } from "../../utils/api";
+import SafeImage from "../../components/SafeImage";
 
 const COLORS = {
   background: "#F8F6F2",
@@ -88,8 +89,8 @@ export default function FeedPostDetails() {
               <Text style={styles.category}>{String(post.category).toUpperCase()}</Text>
             ) : null}
             {image ? (
-              <Image
-                source={{ uri: normalizeImageUrl(image) }}
+              <SafeImage
+                uri={normalizeImageUrl(image)}
                 style={styles.image}
                 resizeMode="cover"
               />

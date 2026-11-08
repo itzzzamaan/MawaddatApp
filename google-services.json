@@ -12,7 +12,20 @@
           "package_name": "Mawaddat.App"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "929703402001-5ht47tc4sb5monu8fd7ds2jla8rm01n8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "Mawaddat.App",
+            "certificate_hash": "d2a58688d6345f365ba468e117e1d704e4c5d8c8"
+          }
+        },
+        {
+          "client_id": "929703402001-ntnpeoe05rnmdmie89qtq1dojq3sdlsc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBzAV6CjigPsmJM_UohWVMg_q30MJSJ4xY"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "929703402001-ntnpeoe05rnmdmie89qtq1dojq3sdlsc.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "929703402001-pi5vuqc8k47unmnplooacftvfku2np37.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "Mawaddat.App.Ios"
+              }
+            }
+          ]
         }
       }
     }

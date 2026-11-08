@@ -1,9 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const HomeFeed = require("../models/HomeFeed");
-const { notifyPoetFollowersAboutPost } = require("../notificationService");
+const {
+  notifyUsersAboutPost,
+  normalizeNotificationCity,
+} = require("../notificationService");
 const { saveImageAsset } = require("../database");
 const auth = require("../middleware/auth");
+const userAuth = require("../middleware/userAuth");
 const adminOnly = require("../middleware/adminOnly");
 const { compareByDisplayOrder, setDisplayOrder } = require("../utils/displayOrder");
 const multer = require("multer");
@@ -170,18 +174,21 @@ router.post(
     try {
       let body = normalizeHomeFeedBody(req.body || {});
       delete body.displayOrder;
-      body = await applyStoredImageFields(body, req.files || {});
-
-      if (!body.image && !body.avatar) {
-        return res.status(400).json({ message: "Image is required" });
+      body.location = normalizeNotificationCity(body.location);
+      if (
+        typeof body.poet !== "string" ||
+        !body.poet.trim() ||
+        typeof body.category !== "string" ||
+        !body.category.trim()
+      ) {
+        return res.status(400).json({ message: "Poet and category are required" });
       }
 
-      body.image = body.image || body.avatar;
-      body.avatar = body.avatar || body.image;
+      body = await applyStoredImageFields(body, req.files || {});
 
       const item = new HomeFeed(body);
       await item.save();
-      await notifyPoetFollowersAboutPost(item);
+      await notifyUsersAboutPost(item);
       res.json({
         ...item.toObject(),
         comments: normalizeCommentList(item.comments)
@@ -231,14 +238,19 @@ router.put(
     try {
       let body = normalizeHomeFeedBody(req.body || {});
       delete body.displayOrder;
-      body = await applyStoredImageFields(body, req.files || {});
-
-      if (!body.image && !body.avatar) {
-        return res.status(400).json({ message: "Image is required" });
+      if (Object.prototype.hasOwnProperty.call(body, "location")) {
+        body.location = normalizeNotificationCity(body.location);
+      }
+      if (
+        typeof body.poet !== "string" ||
+        !body.poet.trim() ||
+        typeof body.category !== "string" ||
+        !body.category.trim()
+      ) {
+        return res.status(400).json({ message: "Poet and category are required" });
       }
 
-      body.image = body.image || body.avatar;
-      body.avatar = body.avatar || body.image;
+      body = await applyStoredImageFields(body, req.files || {});
 
       const item = await HomeFeed.findByIdAndUpdate(req.params.id, body, {
         new: true,
@@ -270,9 +282,9 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
-router.post("/:id/comments", auth, async (req, res) => {
+router.post("/:id/comments", userAuth, async (req, res) => {
   try {
-    const { text, userId, userName, userAvatar } = req.body || {};
+    const { text, userName, userAvatar } = req.body || {};
     if (!text || !String(text).trim()) {
       return res.status(400).json({ message: "Comment text is required." });
     }
@@ -285,7 +297,7 @@ router.post("/:id/comments", auth, async (req, res) => {
     const currentComments = normalizeCommentList(feed.comments);
     const comment = {
       text: String(text).trim(),
-      userId: userId || "",
+      userId: req.user.id,
       userName: userName || "User",
       userAvatar: userAvatar || "",
       createdAt: new Date(),
@@ -307,10 +319,68 @@ router.post("/:id/comments", auth, async (req, res) => {
   }
 });
 
+router.patch("/:id/comments/:commentId", userAuth, async (req, res) => {
+  try {
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    if (!text) {
+      return res.status(400).json({ message: "Comment text is required." });
+    }
+
+    const feed = await HomeFeed.findById(req.params.id);
+    if (!feed) return res.status(404).json({ message: "Post not found." });
+
+    const comment = feed.comments.id(req.params.commentId);
+    if (!comment) {
+      return res.status(404).json({ message: "Comment not found." });
+    }
+    if (String(comment.userId) !== String(req.user.id)) {
+      return res.status(403).json({ message: "You can only edit your own comments." });
+    }
+
+    comment.text = text;
+    await feed.save();
+    return res.json({
+      success: true,
+      comments: normalizeCommentList(feed.comments)
+        .map(normalizeStoredComment)
+        .filter(Boolean),
+    });
+  } catch (error) {
+    console.error("Edit homefeed comment failed:", error.name || "UnknownError");
+    return res.status(500).json({ message: "Failed to edit comment." });
+  }
+});
+
+router.delete("/:id/comments/:commentId", userAuth, async (req, res) => {
+  try {
+    const feed = await HomeFeed.findById(req.params.id);
+    if (!feed) return res.status(404).json({ message: "Post not found." });
+
+    const comment = feed.comments.id(req.params.commentId);
+    if (!comment) {
+      return res.status(404).json({ message: "Comment not found." });
+    }
+    if (String(comment.userId) !== String(req.user.id)) {
+      return res.status(403).json({ message: "You can only delete your own comments." });
+    }
+
+    comment.deleteOne();
+    await feed.save();
+    return res.json({
+      success: true,
+      comments: normalizeCommentList(feed.comments)
+        .map(normalizeStoredComment)
+        .filter(Boolean),
+    });
+  } catch (error) {
+    console.error("Delete homefeed comment failed:", error.name || "UnknownError");
+    return res.status(500).json({ message: "Failed to delete comment." });
+  }
+});
+
 module.exports = router;
 
-const getImagePathFromBody = (body = {}) => {
-  const value = body?.image || body?.avatar || "";
+const getImagePathFromBody = (value) => {
   if (typeof value !== "string") return "";
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -320,20 +390,21 @@ const getImagePathFromBody = (body = {}) => {
 };
 
 const applyStoredImageFields = async (body = {}, files = {}) => {
-  const directImage = getImagePathFromBody(body);
-  const file =
-    (files.image && files.image[0]) || (files.avatar && files.avatar[0]);
+  for (const field of ["image", "avatar"]) {
+    const file = files[field]?.[0];
+    if (file?.buffer) {
+      body[field] = (await saveImageAsset(file.buffer, file.mimetype)).path;
+      continue;
+    }
 
-  if (file?.buffer) {
-    const saved = (await saveImageAsset(file.buffer, file.mimetype)).path;
-    body.image = saved;
-    body.avatar = saved;
-    return body;
-  }
-
-  if (directImage) {
-    body.image = directImage;
-    body.avatar = body.avatar && typeof body.avatar === "string" && body.avatar.trim().startsWith("/uploads/") ? body.avatar.trim() : directImage;
+    if (Object.prototype.hasOwnProperty.call(body, field)) {
+      const imagePath = getImagePathFromBody(body[field]);
+      if (imagePath) {
+        body[field] = imagePath;
+      } else {
+        delete body[field];
+      }
+    }
   }
 
   return body;

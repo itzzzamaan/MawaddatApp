@@ -79,6 +79,7 @@ export default function RootLayout() {
             <Stack.Screen name="savedpujas" options={{ headerShown: false }} />
             <Stack.Screen name="EditProfile" options={{ headerShown: false }} />
             <Stack.Screen name="about" options={{ headerShown: false }} />
+            <Stack.Screen name="privacy-policy" options={{ headerShown: false }} />
             <Stack.Screen name="store/cart" options={{ headerShown: false }} />
             <Stack.Screen name="panditprofile" options={{ headerShown: false }} />
             <Stack.Screen name="store/[productId]" options={{ headerShown: false }} />

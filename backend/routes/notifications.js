@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
 const User = require("../models/User");
 const userAuth = require("../middleware/userAuth");
+const { normalizeNotificationCity } = require("../notificationService");
 
 const router = express.Router();
 
@@ -54,6 +55,24 @@ router.put("/followed-poets", userAuth, async (req, res) => {
   } catch (error) {
     console.error("Sync followed poets error:", error);
     return res.status(500).json({ message: "Failed to sync followed poets" });
+  }
+});
+
+router.put("/location", userAuth, async (req, res) => {
+  const city = req.body?.city;
+  if (typeof city !== "string" || city.length > 100) {
+    return res.status(400).json({ message: "A valid city is required." });
+  }
+
+  try {
+    await User.updateOne(
+      { _id: req.user.id },
+      { $set: { notificationCity: normalizeNotificationCity(city) } },
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Sync notification location error:", error);
+    return res.status(500).json({ message: "Failed to update notification location." });
   }
 });
 

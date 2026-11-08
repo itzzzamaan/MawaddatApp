@@ -20,10 +20,7 @@ import {
 } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "@/utils/secureStorage";
-import {
-  getFirebaseAuthApi,
-  getFirebaseAuthErrorMessage,
-} from "../utils/firebaseAuth";
+import { postAuth, setPendingSignup } from "../utils/otpApi";
 import GoogleAuthButton from "../components/GoogleAuthButton";
 
 // On web, a press-handling wrapper blurs the input as soon as it is clicked,
@@ -67,8 +64,8 @@ export default function SignUp() {
       return;
     }
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
       return;
     }
 
@@ -76,31 +73,23 @@ export default function SignUp() {
       setIsCreatingAccount(true);
       setError("");
 
-      const firebaseAuth = await getFirebaseAuthApi();
-      const auth = firebaseAuth.getAuth();
-      const { user } = await firebaseAuth.createUserWithEmailAndPassword(
-        auth,
-        email.trim().toLowerCase(),
+      const normalizedEmail = email.trim().toLowerCase();
+      const result = await postAuth("send-signup-otp", {
+        name: name.trim(),
+        email: normalizedEmail,
         password,
-      );
-      await firebaseAuth.updateProfile(user, { displayName: name.trim() });
-
-      let mailError = "";
-      try {
-        await firebaseAuth.sendEmailVerification(user);
-      } catch (emailError) {
-        mailError = getFirebaseAuthErrorMessage(emailError);
-      }
+      });
+      setPendingSignup({ name: name.trim(), email: normalizedEmail, password });
 
       router.replace({
         pathname: "/Otp",
         params: {
-          email: user.email || email.trim().toLowerCase(),
-          mailError,
+          email: normalizedEmail,
+          resendAfter: String(result.resendAfterSeconds || 60),
         },
       });
     } catch (err) {
-      setError(getFirebaseAuthErrorMessage(err));
+      setError(err.message);
     } finally {
       setIsCreatingAccount(false);
     }

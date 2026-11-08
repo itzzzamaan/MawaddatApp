@@ -1,5 +1,6 @@
+import * as SecureStore from "@/utils/secureStorage";
 import { useRouter } from "expo-router";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -9,20 +10,20 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Colors } from "../constants/theme";
 import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as SecureStore from "@/utils/secureStorage";
+import GoogleAuthButton from "../components/GoogleAuthButton";
+import { Colors } from "../constants/theme";
+import { getApiBase } from "../utils/api";
 import {
   completeFirebaseSignIn,
   getFirebaseAuthApi,
   getFirebaseAuthErrorMessage,
 } from "../utils/firebaseAuth";
-import { getApiBase } from "../utils/api";
-import GoogleAuthButton from "../components/GoogleAuthButton";
+import { postAuth, storeUserSession } from "../utils/otpApi";
 
 const SignIn = () => {
   const router = useRouter();
@@ -75,13 +76,39 @@ const SignIn = () => {
         await SecureStore.deleteItemAsync("user_account");
         await SecureStore.deleteItemAsync("user_profile");
         await SecureStore.setItemAsync("admin_token", adminJson.token);
-        await SecureStore.setItemAsync("admin_user", JSON.stringify(adminJson.admin));
+        await SecureStore.setItemAsync(
+          "admin_user",
+          JSON.stringify(adminJson.admin),
+        );
         setError("");
         router.replace("/admin/dashboard");
         return;
       }
 
-      const firebaseAuth = await getFirebaseAuthApi();
+      // Accounts created with email OTP sign in against the Mawaddat backend.
+      try {
+        const session = await postAuth("user-login", {
+          email: normalizedEmail,
+          password,
+        });
+        await storeUserSession(session);
+        setError("");
+        router.replace("/Splash-carousel");
+        return;
+      } catch (backendError) {
+        if (backendError.status !== 401) throw backendError;
+      }
+
+      // Older accounts created through Firebase Auth still sign in via Firebase.
+      let firebaseAuth;
+      try {
+        firebaseAuth = await getFirebaseAuthApi();
+      } catch {
+        setError(
+          "Invalid email or password. Forgot your password? Use 'Forgot password' to set a new one.",
+        );
+        return;
+      }
       const auth = firebaseAuth.getAuth();
       const { user } = await firebaseAuth.signInWithEmailAndPassword(
         auth,
@@ -90,10 +117,9 @@ const SignIn = () => {
       );
 
       if (!user.emailVerified) {
-        router.replace({
-          pathname: "/Otp",
-          params: { email: user.email || normalizedEmail },
-        });
+        setError(
+          "This email was never verified. Sign up again to verify it with a code.",
+        );
         return;
       }
 
@@ -101,7 +127,7 @@ const SignIn = () => {
       setError("");
       router.replace("/Splash-carousel");
     } catch (err) {
-      setError(getFirebaseAuthErrorMessage(err));
+      setError(err.code ? getFirebaseAuthErrorMessage(err) : err.message);
     } finally {
       setIsSigningIn(false);
     }
@@ -112,7 +138,9 @@ const SignIn = () => {
       <View style={styles.formContainer}>
         <View style={styles.header}>
           <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Login using your email and password</Text>
+          <Text style={styles.subtitle}>
+            Login using your email and password
+          </Text>
         </View>
 
         <View style={styles.innerContainer}>
@@ -147,13 +175,13 @@ const SignIn = () => {
 
             <GoogleAuthButton />
 
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.forgotPasswordButton}
               onPress={() => router.push("/Forgot-password")}
               accessibilityRole="button"
             >
               <Text style={styles.forgotPasswordText}>Forgot password?</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </ScrollView>
@@ -172,12 +200,12 @@ const SignIn = () => {
               )}
             </TouchableOpacity>
 
-            <View style={styles.signup}>
+            {/* <View style={styles.signup}>
               <Text style={styles.signupLabel}>Don’t have an account?</Text>
               <TouchableOpacity onPress={() => router.push("/signup")}>
                 <Text style={styles.signupText}> Sign Up</Text>
               </TouchableOpacity>
-            </View>
+            </View> */}
           </View>
         </View>
       </View>

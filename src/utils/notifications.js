@@ -76,6 +76,17 @@ export const syncFollowedPoets = async (followedPoets, token) => {
   }
 };
 
+export const syncUserLocation = async (city, token) => {
+  const response = await fetch(`${getApiBase()}/api/notifications/location`, {
+    method: "PUT",
+    headers: authorizedHeaders(token),
+    body: JSON.stringify({ city: String(city || "").slice(0, 100) }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to sync notification location (${response.status})`);
+  }
+};
+
 export const registerPushDevice = async (token) => {
   if (
     !isFirebasePushConfigured ||

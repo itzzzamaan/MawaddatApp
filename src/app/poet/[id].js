@@ -1,21 +1,26 @@
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  Image,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  Alert,
-  Share,
-  Linking,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import * as SecureStore from "@/utils/secureStorage";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useSavedPosts } from "../../contexts/SavedPostsContext";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  Image,
+  Linking,
+  Modal,
+  ScrollView,
+  Share,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Navbar from "../../components/Navbar";
+import SafeImage from "../../components/SafeImage";
+import { useSavedPosts } from "../../contexts/SavedPostsContext";
 import { getApiBase, normalizeImageUrl } from "../../utils/api";
 
 const PINK = "#2C1810";
@@ -93,12 +98,16 @@ const normalizePoetRecord = (item = {}) => {
   const imageUrl = resolveImageUrl(item.image || item.avatar || "");
 
   return {
-    id: String(item._id || item.id || item.name || "unknown-poet"),
-    name: item.name || "Selected Poet",
+    id: String(item._id || item.id || item.name),
+    name: item.name,
     years: item.years || "",
     location: item.location || "",
-    image: imageUrl || fallbackPoets[item._id]?.image || fallbackPoets[item.name?.toLowerCase()?.replace(/\s+/g, "-")]?.image || require("../assets/images/jaunelia.jpeg"),
-    biography: item.bio || item.description || item.biography || "This poet profile is temporarily unavailable.",
+    image: imageUrl,
+    biography:
+      item.bio ||
+      item.description ||
+      item.biography ||
+      "This poet profile is temporarily unavailable.",
   };
 };
 
@@ -118,6 +127,7 @@ const normalizeHomeFeedRecord = (item = {}) => {
     rawContent && typeof rawContent === "object"
       ? rawContent
       : { roman: String(rawContent || "") };
+  const comments = Array.isArray(item.comments) ? item.comments : [];
 
   return {
     id: String(item._id || item.id || `${Date.now()}-${Math.random()}`),
@@ -127,7 +137,10 @@ const normalizeHomeFeedRecord = (item = {}) => {
     title: item.title || item.category || "Poem",
     source: item.source || item.type || item.category || "Featured",
     duration: item.duration || "05:00",
-    image: resolveImageUrl(item.image || item.avatar || "") || "",
+    image:
+      resolveImageUrl(item.image || (item.type === "image" ? item.avatar : "")) ||
+      "",
+    avatar: resolveImageUrl(item.avatar || "") || "",
     text: item.text || content.roman || content.urdu || content.hindi || "",
     content: {
       roman: content.roman || content.text || item.text || "",
@@ -135,7 +148,14 @@ const normalizeHomeFeedRecord = (item = {}) => {
       hindi: content.hindi || "",
     },
     likes: Number(item.likes || 0),
-    comments: Number(item.comments || 0),
+    comments: comments.map((comment, index) => ({
+      id: String(comment._id || comment.id || `${Date.now()}-${index}`),
+      userId: String(comment.userId || ""),
+      userName: comment.userName || "User",
+      userAvatar: comment.userAvatar || "",
+      text: comment.text || "",
+    })),
+    commentCount: comments.length || Number(item.comments || 0),
     saved: Boolean(item.saved),
     liked: Boolean(item.liked),
     youtubeUrl: item.youtubeUrl || "",
@@ -192,6 +212,9 @@ const normalizeSavedItem = (item) => {
       hindi: content.hindi || content.roman || content.urdu || item?.text || "",
     },
     comments: Array.isArray(item?.comments) ? item.comments : [],
+    commentCount: Array.isArray(item?.comments)
+      ? item.comments.length
+      : Number(item?.commentCount || item?.comments || 0),
     following: Boolean(item?.following),
     liked: Boolean(item?.liked),
     saved: Boolean(item?.saved || item?.isSaved),
@@ -199,11 +222,11 @@ const normalizeSavedItem = (item) => {
   };
 };
 
-const FALLBACK_POET_IMAGE = "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500";
+// const FALLBACK_POET_IMAGE = "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500";
 
 const getPoetImageUrl = (value) => {
   if (typeof value === "string" && value.trim()) return value;
-  return FALLBACK_POET_IMAGE;
+  return;
 };
 
 export default function PoetProfile() {
@@ -211,22 +234,32 @@ export default function PoetProfile() {
   const poetId = Array.isArray(id) ? id[0] : id;
   const fallbackPoet = fallbackPoets[poetId] || {
     id: poetId || "unknown-poet",
-    name: "Selected Poet",
-    years: "",
-    location: "",
-    image: require("../assets/images/jaunelia.jpeg"),
-    biography: "This poet profile is temporarily unavailable.",
+    name: "",
+    // years: "",
+    // location: "",
+    // image: require("../assets/images/jaunelia.jpeg"),
+    // biography: "This poet profile is temporarily unavailable.",
   };
 
-  const { savedPosts, toggleSavedPost, isPostSaved, isPoetFollowed, toggleFollowedPoet } = useSavedPosts();
+  const {
+    savedPosts,
+    toggleSavedPost,
+    isPostSaved,
+    isPoetFollowed,
+    toggleFollowedPoet,
+  } = useSavedPosts();
 
   const [remotePoet, setRemotePoet] = useState(null);
   const [activeCategory, setActiveCategory] = useState("All");
   const [language, setLanguage] = useState("roman");
   const [following, setFollowing] = useState(Boolean(isPoetFollowed(poetId)));
   const [likedPosts, setLikedPosts] = useState({});
-  const [commentCounts, setCommentCounts] = useState({});
+  const [commentPostId, setCommentPostId] = useState(null);
+  const [commentText, setCommentText] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [expandedPost, setExpandedPost] = useState(null);
+  const [postOverflow, setPostOverflow] = useState({});
   const [posts, setPosts] = useState([]);
   const [postLanguages, setPostLanguages] = useState({});
 
@@ -252,13 +285,13 @@ export default function PoetProfile() {
         if (!res.ok) return;
         const feedData = await res.json();
         const items = Array.isArray(feedData) ? feedData : [];
-        const mapped = items
-          .map(normalizeHomeFeedRecord)
-          .filter((post) => {
-            const matchesId = String(post.poetId) === String(poetId);
-            const matchesName = String(post.poetName || "").toLowerCase() === String(fallbackPoet.name || "").toLowerCase();
-            return matchesId || matchesName;
-          });
+        const mapped = items.map(normalizeHomeFeedRecord).filter((post) => {
+          const matchesId = String(post.poetId) === String(poetId);
+          const matchesName =
+            String(post.poetName || "").toLowerCase() ===
+            String(fallbackPoet.name || "").toLowerCase();
+          return matchesId || matchesName;
+        });
 
         setPosts(mapped);
       } catch (error) {
@@ -274,6 +307,24 @@ export default function PoetProfile() {
   useEffect(() => {
     setFollowing(Boolean(isPoetFollowed(poetId)));
   }, [poetId, isPoetFollowed]);
+
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      try {
+        const profileRaw = await SecureStore.getItemAsync("user_profile");
+        const accountRaw = await SecureStore.getItemAsync("user_account");
+        setCurrentUser(
+          (profileRaw && JSON.parse(profileRaw)) ||
+            (accountRaw && JSON.parse(accountRaw)) ||
+            null,
+        );
+      } catch (error) {
+        console.error("Failed to load current user:", error);
+      }
+    };
+
+    loadCurrentUser();
+  }, []);
 
   const setPostLanguage = (postId, nextLanguage) => {
     setPostLanguages((current) => ({
@@ -313,6 +364,16 @@ export default function PoetProfile() {
   }, [posts, activeCategory]);
 
   const poet = remotePoet || fallbackPoet;
+  const expandedPostData = posts.find((post) => post.id === expandedPost);
+  const expandedPostLanguage = expandedPostData
+    ? postLanguages[expandedPostData.id] || "roman"
+    : "roman";
+  const expandedPostText = expandedPostData
+    ? expandedPostData.content?.[expandedPostLanguage] ||
+      expandedPostData.text ||
+      expandedPostData.title ||
+      ""
+    : "";
 
   if (!poet) {
     return (
@@ -334,8 +395,16 @@ export default function PoetProfile() {
 
   const handleShare = async (post) => {
     try {
+      const postUrl = `${getApiBase()}/share/post/${encodeURIComponent(post.id)}`;
+      const text =
+        post.content?.[postLanguages[post.id] || "roman"] ||
+        post.text ||
+        post.title ||
+        "";
       await Share.share({
-        message: `${poet.name}\n\n${post.content?.[postLanguages[post.id] || "roman"] || post.text || post.title}`,
+        title: `${poet.name} on Mawaddat`,
+        message: `${poet.name}\n\n${text}\n\n${postUrl}`,
+        url: postUrl,
       });
     } catch {
       Alert.alert("Unable to share", "Please try again.");
@@ -350,10 +419,150 @@ export default function PoetProfile() {
   };
 
   const handleComment = (post) => {
-    Alert.alert(
-      "Comments",
-      "Connect your comments screen or API here to display and submit comments."
-    );
+    setCommentPostId(post.id);
+    setCommentText("");
+    setEditingCommentId(null);
+  };
+
+  const submitComment = async () => {
+    const text = commentText.trim();
+    if (!text || !commentPostId) {
+      Alert.alert("Write a comment", "Please enter a comment first.");
+      return;
+    }
+
+    const token = await SecureStore.getItemAsync("user_token");
+    if (!token) {
+      Alert.alert("Login required", "Please sign in again to comment.");
+      return;
+    }
+
+    try {
+      const isEditing = Boolean(editingCommentId);
+      const response = await fetch(
+        `${getApiBase()}/api/homefeeds/${commentPostId}/comments${isEditing ? `/${editingCommentId}` : ""}`,
+        {
+          method: isEditing ? "PATCH" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            text,
+            userName:
+              currentUser?.name ||
+              currentUser?.fullName ||
+              currentUser?.email?.split("@")?.[0] ||
+              "User",
+            userAvatar:
+              currentUser?.imageUri ||
+              currentUser?.avatar ||
+              currentUser?.profileImage ||
+              "",
+          }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || "Unable to save comment.");
+      }
+
+      const comments = Array.isArray(data.comments)
+        ? data.comments.map((comment, index) => ({
+            id: String(comment._id || comment.id || `${Date.now()}-${index}`),
+            userId: String(comment.userId || ""),
+            userName: comment.userName || "User",
+            userAvatar: comment.userAvatar || "",
+            text: comment.text || "",
+          }))
+        : [];
+      setPosts((current) =>
+        current.map((post) =>
+          post.id === commentPostId
+            ? { ...post, comments, commentCount: comments.length }
+            : post,
+        ),
+      );
+      setCommentText("");
+      setEditingCommentId(null);
+      if (!isEditing) setCommentPostId(null);
+      Alert.alert(isEditing ? "Comment updated" : "Comment added");
+    } catch (error) {
+      Alert.alert(
+        editingCommentId ? "Unable to update comment" : "Unable to add comment",
+        error.message || "Please try again.",
+      );
+    }
+  };
+
+  const deleteComment = (commentId) => {
+    Alert.alert("Delete comment?", "This comment will be permanently deleted.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          const token = await SecureStore.getItemAsync("user_token");
+          if (!token) {
+            Alert.alert("Login required", "Please sign in again.");
+            return;
+          }
+
+          try {
+            const response = await fetch(
+              `${getApiBase()}/api/homefeeds/${commentPostId}/comments/${commentId}`,
+              {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+              },
+            );
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data?.message || "Unable to delete comment.");
+            }
+
+            const comments = Array.isArray(data.comments)
+              ? data.comments.map((comment, index) => ({
+                  id: String(comment._id || comment.id || `${Date.now()}-${index}`),
+                  userId: String(comment.userId || ""),
+                  userName: comment.userName || "User",
+                  userAvatar: comment.userAvatar || "",
+                  text: comment.text || "",
+                }))
+              : [];
+            setPosts((current) =>
+              current.map((post) =>
+                post.id === commentPostId
+                  ? { ...post, comments, commentCount: comments.length }
+                  : post,
+              ),
+            );
+            if (editingCommentId === commentId) {
+              setEditingCommentId(null);
+              setCommentText("");
+            }
+          } catch (error) {
+            Alert.alert(
+              "Unable to delete comment",
+              error.message || "Please try again.",
+            );
+          }
+        },
+      },
+    ]);
+  };
+
+  const shareProfile = async () => {
+    try {
+      const profileUrl = `${getApiBase()}/share/poet/${encodeURIComponent(poetId)}`;
+      await Share.share({
+        title: `${poet.name} on Mawaddat`,
+        message: `${poet.name}\n\n${poet.biography || ""}\n\n${profileUrl}`,
+        url: profileUrl,
+      });
+    } catch {
+      Alert.alert("Unable to share", "Please try again.");
+    }
   };
 
   const handleBookmark = (post) => {
@@ -362,8 +571,8 @@ export default function PoetProfile() {
 
     setPosts((current) =>
       current.map((item) =>
-        item.id === post.id ? { ...item, saved: nextSaved } : item
-      )
+        item.id === post.id ? { ...item, saved: nextSaved } : item,
+      ),
     );
 
     toggleSavedPost({
@@ -376,7 +585,12 @@ export default function PoetProfile() {
       youtubeUrl: typeof post.youtubeUrl === "string" ? post.youtubeUrl : "",
       type: post.image ? "image" : post.type,
       saved: nextSaved,
-      text: post.text || post.content?.roman || post.content?.urdu || post.content?.hindi || post.title,
+      text:
+        post.text ||
+        post.content?.roman ||
+        post.content?.urdu ||
+        post.content?.hindi ||
+        post.title,
       content: post.content || {
         roman: post.text || "",
         urdu: post.text || "",
@@ -388,7 +602,7 @@ export default function PoetProfile() {
       nextSaved ? "Saved to Wishlist" : "Removed from Wishlist",
       nextSaved
         ? "This Shayari was added to your saved posts."
-        : "This Shayari was removed from your saved posts."
+        : "This Shayari was removed from your saved posts.",
     );
   };
 
@@ -400,7 +614,7 @@ export default function PoetProfile() {
       nextFollowed ? "Following Poet" : "Unfollowed Poet",
       nextFollowed
         ? `You are now following ${poet.name}.`
-        : `You have unfollowed ${poet.name}.`
+        : `You have unfollowed ${poet.name}.`,
     );
   };
 
@@ -408,10 +622,7 @@ export default function PoetProfile() {
     Alert.alert(poet.name, "Choose an option", [
       {
         text: "Share profile",
-        onPress: () =>
-          Share.share({
-            message: `${poet.name}\n${poet.biography}`,
-          }),
+        onPress: shareProfile,
       },
       {
         text: "Cancel",
@@ -421,7 +632,7 @@ export default function PoetProfile() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <View style={styles.screen}>
         <StatusBar barStyle="dark-content" backgroundColor="#C9D9EA" />
         <Navbar />
@@ -479,19 +690,23 @@ export default function PoetProfile() {
             </View>
 
             <View style={styles.profileIdentityRow}>
-              <Image
-                source={typeof poet.image === "string" ? { uri: poet.image } : poet.image}
-                style={styles.profileImage}
-              />
+              {typeof poet.image === "string" ? (
+                <SafeImage uri={poet.image} style={styles.profileImage} />
+              ) : (
+                <Image source={poet.image} style={styles.profileImage} />
+              )}
 
               <View style={styles.profileTextWrap}>
                 <Text style={styles.poetName}>{poet.name}</Text>
 
                 <Text style={styles.poetMeta}>
-                  {poet.years} <Text style={styles.metaSeparator}>|</Text> {poet.location}
+                  {poet.years} <Text style={styles.metaSeparator}>|</Text>{" "}
+                  {poet.location}
                 </Text>
 
-                <Text style={styles.biography} numberOfLines={3}>{poet.biography}</Text>
+                <Text style={styles.biography} numberOfLines={3}>
+                  {poet.biography}
+                </Text>
               </View>
             </View>
           </View>
@@ -553,62 +768,73 @@ export default function PoetProfile() {
                 const liked = Boolean(likedPosts[post.id]);
                 const saved = Boolean(post.saved) || isPostSaved(post.id);
                 const likeCount = post.likes + (liked ? 1 : 0);
-                const commentCount = Number(post.comments || 0) + (commentCounts[post.id] || 0);
+                const commentCount = Array.isArray(post.comments)
+                  ? post.comments.length || Number(post.commentCount || 0)
+                  : Number(post.commentCount || post.comments || 0);
                 const currentLanguage = postLanguages[post.id] || "roman";
-                const displayText = post.content?.[currentLanguage] || post.text || post.title || "";
+                const displayText =
+                  post.content?.[currentLanguage] ||
+                  post.text ||
+                  post.title ||
+                  "";
 
                 return (
                   <TouchableOpacity
                     key={post.id}
                     activeOpacity={0.96}
                     onPress={() =>
-                      post.image && post.youtubeUrl ? Linking.openURL(post.youtubeUrl) : null
+                      post.image && post.youtubeUrl
+                        ? Linking.openURL(post.youtubeUrl)
+                        : null
                     }
                     style={styles.postCard}
                   >
                     <View style={styles.postHeader}>
-                      <View style={styles.sourceIcon}>
-                        <Ionicons
-                          name={
-                            post.type === "Kalaam"
-                              ? "musical-notes"
-                              : post.type === "Noha"
-                                ? "heart-dislike-outline"
-                                : post.type === "Salam"
-                                  ? "sparkles-outline"
-                                  : post.type === "Manqabat"
-                                    ? "star-outline"
-                                    : post.type === "Munajat"
-                                      ? "moon-outline"
-                                      : "document-text-outline"
-                          }
-                          size={18}
-                          color="#FFFFFF"
+                      {post.avatar ? (
+                        <SafeImage
+                          uri={post.avatar}
+                          style={styles.postPoetAvatar}
+                          iconSize={18}
+                          showLoader={false}
                         />
-                      </View>
+                      ) : (
+                        <View style={styles.sourceIcon}>
+                          <Ionicons
+                            name={
+                              post.type === "Kalaam"
+                                ? "musical-notes"
+                                : post.type === "Noha"
+                                  ? "heart-dislike-outline"
+                                  : post.type === "Salam"
+                                    ? "sparkles-outline"
+                                    : post.type === "Manqabat"
+                                      ? "star-outline"
+                                      : post.type === "Munajat"
+                                        ? "moon-outline"
+                                        : "document-text-outline"
+                            }
+                            size={18}
+                            color="#FFFFFF"
+                          />
+                        </View>
+                      )}
 
                       <View style={styles.postHeaderText}>
                         <Text style={styles.postTitle} numberOfLines={2}>
                           {post.title}
                         </Text>
                         <Text style={styles.postSource}>
-                          {post.poetName || poet.name} • {post.source || post.type}
+                          {post.poetName || poet.name} •{" "}
+                          {post.source || post.type}
                         </Text>
                       </View>
                     </View>
 
                     {post.image ? (
                       <View>
-                        <Image
-                          source={{ uri: post.image }}
-                          style={styles.videoImage}
-                        />
+                        <SafeImage uri={post.image} style={styles.videoImage} />
                         <View style={styles.playButton}>
-                          <Ionicons
-                            name="play"
-                            size={24}
-                            color="#FFFFFF"
-                          />
+                          <Ionicons name="play" size={24} color="#FFFFFF" />
                         </View>
                         <View style={styles.durationBadge}>
                           <Text style={styles.durationText}>
@@ -619,36 +845,40 @@ export default function PoetProfile() {
                     ) : null}
 
                     {displayText ? (
-                      <TouchableOpacity
-                        activeOpacity={0.9}
-                        onPress={() =>
-                          setExpandedPost((current) =>
-                            current === post.id ? null : post.id
-                          )
-                        }
-                        style={styles.poetryContainer}
-                      >
+                      <View style={styles.poetryContainer}>
                         <Text style={styles.poetryCategory}>
                           {String(post.type).toUpperCase()}
                         </Text>
 
+                        <Text style={styles.poetryText} numberOfLines={2}>
+                          {displayText}
+                        </Text>
+
                         <Text
-                          style={styles.poetryText}
-                          numberOfLines={
-                            expandedPost === post.id ? undefined : 4
-                          }
+                          style={[styles.poetryText, styles.measurePostText]}
+                          onTextLayout={({ nativeEvent }) => {
+                            const hasOverflow = nativeEvent.lines.length > 2;
+                            setPostOverflow((current) =>
+                              current[post.id] === hasOverflow
+                                ? current
+                                : { ...current, [post.id]: hasOverflow },
+                            );
+                          }}
+                          pointerEvents="none"
+                          accessible={false}
                         >
                           {displayText}
                         </Text>
 
-                        {displayText.length > 100 ? (
-                          <Text style={styles.readMore}>
-                            {expandedPost === post.id
-                              ? "Show less"
-                              : "Read more"}
-                          </Text>
+                        {postOverflow[post.id] ? (
+                          <TouchableOpacity
+                            onPress={() => setExpandedPost(post.id)}
+                            accessibilityRole="button"
+                          >
+                            <Text style={styles.readMore}>Read more</Text>
+                          </TouchableOpacity>
                         ) : null}
-                      </TouchableOpacity>
+                      </View>
                     ) : null}
 
                     <View style={styles.languageRowCard}>
@@ -659,13 +889,15 @@ export default function PoetProfile() {
                           onPress={() => setPostLanguage(post.id, item.value)}
                           style={[
                             styles.languageButton,
-                            currentLanguage === item.value && styles.languageButtonActive,
+                            currentLanguage === item.value &&
+                              styles.languageButtonActive,
                           ]}
                         >
                           <Text
                             style={[
                               styles.languageButtonText,
-                              currentLanguage === item.value && styles.languageButtonTextActive,
+                              currentLanguage === item.value &&
+                                styles.languageButtonTextActive,
                             ]}
                           >
                             {item.label}
@@ -734,6 +966,154 @@ export default function PoetProfile() {
           </View>
         </View>
       </View>
+      <Modal
+        visible={Boolean(expandedPostData)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setExpandedPost(null)}
+      >
+        <View style={styles.readMoreBackdrop}>
+          <View style={styles.readMoreModal}>
+            <View style={styles.readMoreModalHeader}>
+              <Text style={styles.readMoreModalTitle} numberOfLines={2}>
+                {expandedPostData?.title || poet.name}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setExpandedPost(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Close full post"
+                style={styles.readMoreCloseButton}
+              >
+                <Ionicons name="close" size={22} color={PINK} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.readMoreScroll}
+              showsVerticalScrollIndicator
+            >
+              <Text style={styles.readMoreModalText}>{expandedPostText}</Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={Boolean(commentPostId)}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setCommentPostId(null);
+          setEditingCommentId(null);
+          setCommentText("");
+        }}
+      >
+        <View style={styles.commentModalBackdrop}>
+          <View style={styles.commentModalCard}>
+            <View style={styles.commentModalHeader}>
+              <Text style={styles.commentModalTitle}>Comments</Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Close comments"
+                onPress={() => {
+                  setCommentPostId(null);
+                  setEditingCommentId(null);
+                  setCommentText("");
+                }}
+                style={styles.commentCloseButton}
+              >
+                <Ionicons name="close" size={20} color={TEXT_PRIMARY} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={
+                posts.find((post) => post.id === commentPostId)?.comments || []
+              }
+              keyExtractor={(item) => String(item.id)}
+              renderItem={({ item }) => (
+                <View style={styles.commentRow}>
+                  {item.userAvatar ? (
+                    <SafeImage
+                      uri={item.userAvatar}
+                      style={styles.commentAvatar}
+                      showLoader={false}
+                    />
+                  ) : (
+                    <View style={styles.commentAvatarFallback}>
+                      <Ionicons name="person" size={17} color={TEXT_MUTED} />
+                    </View>
+                  )}
+                  <View style={styles.commentBody}>
+                    <Text style={styles.commentUserName}>{item.userName}</Text>
+                    <Text style={styles.commentBodyText}>{item.text}</Text>
+                  </View>
+                  {String(item.userId) ===
+                  String(currentUser?.id || currentUser?._id || "") ? (
+                    <View style={styles.commentControls}>
+                      <TouchableOpacity
+                        accessibilityLabel="Edit comment"
+                        onPress={() => {
+                          setEditingCommentId(item.id);
+                          setCommentText(item.text);
+                        }}
+                        style={styles.commentControlButton}
+                      >
+                        <Ionicons
+                          name="pencil-outline"
+                          size={16}
+                          color={TEXT_PRIMARY}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        accessibilityLabel="Delete comment"
+                        onPress={() => deleteComment(item.id)}
+                        style={styles.commentControlButton}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={16}
+                          color="#B42318"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+              contentContainerStyle={styles.commentList}
+              ListEmptyComponent={
+                <Text style={styles.noCommentsText}>
+                  No comments yet. Be the first to comment!
+                </Text>
+              }
+              showsVerticalScrollIndicator={false}
+            />
+            <View style={styles.commentComposer}>
+              <TextInput
+                value={commentText}
+                onChangeText={setCommentText}
+                placeholder={
+                  editingCommentId ? "Edit your comment..." : "Write a comment..."
+                }
+                placeholderTextColor="#8A6A53"
+                style={styles.commentInput}
+                multiline
+              />
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={
+                  editingCommentId ? "Save comment" : "Send comment"
+                }
+                onPress={submitComment}
+                style={styles.commentSendButton}
+              >
+                <Ionicons
+                  name={editingCommentId ? "checkmark" : "send"}
+                  size={18}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -975,6 +1355,13 @@ const styles = StyleSheet.create({
     minHeight: 62,
     backgroundColor: "#FFFDF9",
   },
+  postPoetAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    marginRight: 10,
+    backgroundColor: "#E7E2DB",
+  },
   sourceIcon: {
     width: 36,
     height: 36,
@@ -1030,6 +1417,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   poetryContainer: {
+    position: "relative",
     paddingHorizontal: 14,
     paddingVertical: 12,
     backgroundColor: "#FAF5EF",
@@ -1047,6 +1435,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: TEXT_PRIMARY,
     fontFamily: "Hindi",
+  },
+  measurePostText: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    top: 0,
+    opacity: 0,
   },
   readMore: {
     color: ACCENT,
@@ -1129,5 +1524,158 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
+  },
+  readMoreBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 20,
+    backgroundColor: "rgba(25, 16, 11, 0.62)",
+  },
+  readMoreModal: {
+    maxHeight: "80%",
+    borderRadius: 20,
+    padding: 18,
+    backgroundColor: CARD_BG,
+  },
+  readMoreModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  readMoreModalTitle: {
+    flex: 1,
+    color: TEXT_PRIMARY,
+    fontSize: 17,
+    fontWeight: "800",
+    marginRight: 12,
+  },
+  readMoreCloseButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
+    backgroundColor: "#F0EAE3",
+  },
+  readMoreScroll: {
+    flexShrink: 1,
+  },
+  readMoreModalText: {
+    color: TEXT_PRIMARY,
+    fontSize: 16,
+    lineHeight: 26,
+  },
+  commentModalBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    backgroundColor: "rgba(15, 12, 10, 0.45)",
+  },
+  commentModalCard: {
+    maxHeight: "78%",
+    borderRadius: 22,
+    padding: 16,
+    backgroundColor: CARD_BG,
+  },
+  commentModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  commentModalTitle: {
+    color: TEXT_PRIMARY,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  commentCloseButton: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 17,
+    backgroundColor: "#F0EAE3",
+  },
+  commentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0EAE3",
+  },
+  commentAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+  },
+  commentAvatarFallback: {
+    width: 36,
+    height: 36,
+    marginRight: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
+    backgroundColor: "#F0EAE3",
+  },
+  commentBody: {
+    flex: 1,
+  },
+  commentUserName: {
+    color: TEXT_PRIMARY,
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 3,
+  },
+  commentBodyText: {
+    color: TEXT_PRIMARY,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  commentControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 4,
+  },
+  commentControlButton: {
+    padding: 6,
+  },
+  commentList: {
+    paddingBottom: 8,
+  },
+  noCommentsText: {
+    paddingVertical: 20,
+    color: TEXT_MUTED,
+    textAlign: "center",
+    fontSize: 14,
+  },
+  commentComposer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F0EAE3",
+  },
+  commentInput: {
+    flex: 1,
+    minHeight: 44,
+    maxHeight: 100,
+    borderWidth: 1,
+    borderColor: "#EADCC7",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#FAF7F3",
+    color: TEXT_PRIMARY,
+    fontSize: 14,
+  },
+  commentSendButton: {
+    width: 42,
+    height: 42,
+    marginLeft: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: PINK,
   },
 });

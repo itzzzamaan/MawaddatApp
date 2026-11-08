@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { Platform } from "react-native";
 
@@ -54,26 +54,22 @@ export default function TabLayout() {
         }}
       />
 
-      {/* <Tabs.Screen
-        name="storehome"
+      <Tabs.Screen
+        name="search"
         options={{
-          title: "Store",
+          title: "Search",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cart" size={size} color={color} />
+            <Ionicons name="search-outline" size={size} color={color} />
           ),
         }}
-      /> */}
+      />
 
       <Tabs.Screen
         name="events"
         options={{
           title: "Programs",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons
-              name="calendar-outline"
-              size={size}
-              color={color}
-            />
+            <Ionicons name="calendar-outline" size={size} color={color} />
           ),
         }}
       />
@@ -83,11 +79,7 @@ export default function TabLayout() {
         options={{
           title: "Saved",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons
-              name="bookmark"
-              size={size}
-              color={color}
-            />
+            <Ionicons name="bookmark" size={size} color={color} />
           ),
         }}
       />
@@ -113,8 +105,6 @@ export default function TabLayout() {
           href: null,
         }}
       />
-
     </Tabs>
   );
 }
-

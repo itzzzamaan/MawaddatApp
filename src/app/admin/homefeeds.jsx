@@ -27,6 +27,7 @@ const generatePoetId = () => `poet-${Date.now()}-${Math.random().toString(36).sl
 const emptyPost = {
   poetId: '',
   poet: '',
+  location: '',
   born: '',
   avatar: '',
   type: 'shayari',
@@ -90,7 +91,7 @@ export default function AdminHomeFeeds() {
         ? item.content
         : item.content?.roman;
       const poet = typeof item.poet === 'string' ? item.poet : item.poet?.name;
-      return [item.category, poet, item.poetName, roman]
+      return [item.category, poet, item.poetName, item.location, roman]
         .some((value) => String(value || '').toLowerCase().includes(query));
     });
   }, [items, searchQuery]);
@@ -143,7 +144,10 @@ export default function AdminHomeFeeds() {
   };
 
   const create = async () => {
-    if (!form.poet || !form.content.roman) return;
+    if (!form.poetId || !form.poet.trim() || !form.category.trim()) {
+      alert('Select a poet and category before submitting.');
+      return;
+    }
 
     const authToken = await getAdminToken(token);
     if (!authToken) {
@@ -161,7 +165,9 @@ export default function AdminHomeFeeds() {
       const payload = new FormData();
       payload.append('poetId', generatedPoetId);
       payload.append('poet', form.poet);
+      payload.append('location', (form.location || '').trim());
       payload.append('born', form.born || '');
+      payload.append('avatar', form.avatar || '');
       payload.append('type', imagePath ? 'image' : (form.type || 'Poet'));
       payload.append('category', form.category || 'Kalaam');
       payload.append('content', JSON.stringify(form.content));
@@ -173,7 +179,6 @@ export default function AdminHomeFeeds() {
 
       if (imagePath) {
         payload.append('image', imagePath);
-        payload.append('avatar', imagePath);
       }
 
       const res = await fetch(API + '/homefeeds', {
@@ -205,6 +210,7 @@ export default function AdminHomeFeeds() {
       poetId: poet._id || poet.id || prev.poetId || generatePoetId(),
       poet: poet.name || '',
       born: poet.years || '',
+      avatar: resolveImageUrl(poet.image || poet.avatar) || '',
       type: poet.famousFor || 'Poet',
     }));
     setShowPoetMenu(false);
@@ -216,8 +222,11 @@ export default function AdminHomeFeeds() {
     setForm({
       poetId: item.poetId || matchedPoet?._id || matchedPoet?.id || '',
       poet: item.poet || matchedPoet?.name || '',
+      location: item.location || '',
       born: item.born || matchedPoet?.years || '',
-      avatar: item.avatar || '',
+      avatar:
+        resolveImageUrl(item.avatar || matchedPoet?.image || matchedPoet?.avatar) ||
+        '',
       type: item.type || matchedPoet?.famousFor || 'Poet',
       category: CATEGORY_OPTIONS.includes(item.category) ? item.category : 'Kalaam',
       content: typeof item.content === 'string' ? JSON.parse(item.content || '{}') : (item.content || { roman: '', urdu: '', hindi: '' }),
@@ -227,11 +236,16 @@ export default function AdminHomeFeeds() {
       following: Boolean(item.following),
       saved: Boolean(item.saved),
     });
-    setImage(item.avatar ? resolveImageUrl(item.avatar) : null);
+    setImage(item.image ? resolveImageUrl(item.image) : null);
     setShowCategoryMenu(false);
   };
 
   const update = async (id) => {
+    if (!form.poetId || !form.poet.trim() || !form.category.trim()) {
+      alert('Select a poet and category before submitting.');
+      return;
+    }
+
     const authToken = await getAdminToken(token);
     if (!authToken) {
       alert('Not authenticated. Please login as admin.');
@@ -248,7 +262,9 @@ export default function AdminHomeFeeds() {
       const payload = new FormData();
       payload.append('poetId', generatedPoetId);
       payload.append('poet', form.poet);
+      payload.append('location', (form.location || '').trim());
       payload.append('born', form.born || '');
+      payload.append('avatar', form.avatar || '');
       payload.append('type', imagePath ? 'image' : (form.type || 'Poet'));
       payload.append('category', form.category || 'Kalaam');
       payload.append('content', JSON.stringify(form.content));
@@ -260,7 +276,6 @@ export default function AdminHomeFeeds() {
 
       if (imagePath) {
         payload.append('image', imagePath);
-        payload.append('avatar', imagePath);
       }
 
       const res = await fetch(API + '/homefeeds/' + id, {
@@ -371,6 +386,18 @@ export default function AdminHomeFeeds() {
             </View>
           ) : null}
 
+          {form.avatar ? (
+            <View style={styles.poetImagePreview}>
+              <Image
+                source={{ uri: form.avatar }}
+                style={styles.poetAvatarPreview}
+              />
+              <Text style={styles.poetImageLabel}>
+                Selected poet profile image
+              </Text>
+            </View>
+          ) : null}
+
           <Text style={styles.fieldLabel}>Category</Text>
           <TouchableOpacity
             style={styles.dropdown}
@@ -404,9 +431,17 @@ export default function AdminHomeFeeds() {
             </View>
           ) : null}
 
-          <TextInput style={[styles.input, styles.textarea]} placeholder="Roman version" value={form.content?.roman || ''} onChangeText={(v) => updateContent('roman', v)} placeholderTextColor={Colors.light.textSecondary} multiline />
-          <TextInput style={[styles.input, styles.textarea]} placeholder="Urdu version" value={form.content?.urdu || ''} onChangeText={(v) => updateContent('urdu', v)} placeholderTextColor={Colors.light.textSecondary} multiline />
-          <TextInput style={[styles.input, styles.textarea]} placeholder="Hindi version" value={form.content?.hindi || ''} onChangeText={(v) => updateContent('hindi', v)} placeholderTextColor={Colors.light.textSecondary} multiline />
+          <TextInput
+            style={styles.input}
+            placeholder="Notification city for local alerts (e.g. Lucknow)"
+            value={form.location || ''}
+            onChangeText={(value) => updateField('location', value)}
+            placeholderTextColor={Colors.light.textSecondary}
+          />
+
+          <TextInput style={[styles.input, styles.textarea]} placeholder="Roman version (optional)" value={form.content?.roman || ''} onChangeText={(v) => updateContent('roman', v)} placeholderTextColor={Colors.light.textSecondary} multiline />
+          <TextInput style={[styles.input, styles.textarea]} placeholder="Urdu version (optional)" value={form.content?.urdu || ''} onChangeText={(v) => updateContent('urdu', v)} placeholderTextColor={Colors.light.textSecondary} multiline />
+          <TextInput style={[styles.input, styles.textarea]} placeholder="Hindi version (optional)" value={form.content?.hindi || ''} onChangeText={(v) => updateContent('hindi', v)} placeholderTextColor={Colors.light.textSecondary} multiline />
 
           <View style={styles.actionRow}>
             <TouchableOpacity onPress={pickImage} style={[styles.btn, styles.imageBtn]}>
@@ -448,7 +483,7 @@ export default function AdminHomeFeeds() {
               <Image source={{ uri: resolveImageUrl(item.avatar || item.image) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800' }} style={styles.rowImage} />
               <View style={{ flex: 1, paddingLeft: 10 }}>
                 <Text style={styles.itemTitle}>{item.poet}</Text>
-                <Text style={styles.itemMeta}>{item.category} • {item.type}</Text>
+                <Text style={styles.itemMeta}>{item.category} • {item.type}{item.location ? ` • ${item.location}` : ''}</Text>
                 <Text style={styles.itemText} numberOfLines={2}>{typeof item.content === 'string' ? item.content : (item.content?.roman || item.content?.urdu || item.content?.hindi || '')}</Text>
                 <View style={styles.orderRow}>
                   <Text style={styles.orderLabel}>Rank #{item.displayOrder || '—'}</Text>
@@ -524,6 +559,23 @@ const styles = StyleSheet.create({
   dropdownOptionTextSelected: { color: '#C49A32' },
   emptyPoetState: { padding: 12 },
   emptyPoetText: { color: Colors.light.textSecondary },
+  poetImagePreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  poetAvatarPreview: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E7E2DB',
+  },
+  poetImageLabel: {
+    color: Colors.light.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   actionRow: { flexDirection: 'row', gap: 8 },
   btn: { backgroundColor: Colors.light.text, padding: 12, borderRadius: 10, alignItems: 'center', flex: 1 },
   imageBtn: { backgroundColor: '#D5C8B0' },

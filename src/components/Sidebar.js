@@ -251,6 +251,13 @@ const Sidebar = ({ visible, onClose, username: usernameProp }) => {
             onPress={() => navigate("/helpandsupport")}
           />
 
+          <MenuItem
+            icon="shield-check-outline"
+            text="Privacy Policy"
+            active={isActive(["/privacy-policy"])}
+            onPress={() => navigate("/privacy-policy")}
+          />
+
           <View style={styles.footer}>
             <View style={styles.footerDivider} />
 
