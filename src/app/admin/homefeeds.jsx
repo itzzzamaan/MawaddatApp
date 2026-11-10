@@ -27,7 +27,6 @@ const generatePoetId = () => `poet-${Date.now()}-${Math.random().toString(36).sl
 const emptyPost = {
   poetId: '',
   poet: '',
-  location: '',
   born: '',
   avatar: '',
   type: 'shayari',
@@ -91,7 +90,7 @@ export default function AdminHomeFeeds() {
         ? item.content
         : item.content?.roman;
       const poet = typeof item.poet === 'string' ? item.poet : item.poet?.name;
-      return [item.category, poet, item.poetName, item.location, roman]
+      return [item.category, poet, item.poetName, roman]
         .some((value) => String(value || '').toLowerCase().includes(query));
     });
   }, [items, searchQuery]);
@@ -165,7 +164,6 @@ export default function AdminHomeFeeds() {
       const payload = new FormData();
       payload.append('poetId', generatedPoetId);
       payload.append('poet', form.poet);
-      payload.append('location', (form.location || '').trim());
       payload.append('born', form.born || '');
       payload.append('avatar', form.avatar || '');
       payload.append('type', imagePath ? 'image' : (form.type || 'Poet'));
@@ -222,7 +220,6 @@ export default function AdminHomeFeeds() {
     setForm({
       poetId: item.poetId || matchedPoet?._id || matchedPoet?.id || '',
       poet: item.poet || matchedPoet?.name || '',
-      location: item.location || '',
       born: item.born || matchedPoet?.years || '',
       avatar:
         resolveImageUrl(item.avatar || matchedPoet?.image || matchedPoet?.avatar) ||
@@ -262,7 +259,6 @@ export default function AdminHomeFeeds() {
       const payload = new FormData();
       payload.append('poetId', generatedPoetId);
       payload.append('poet', form.poet);
-      payload.append('location', (form.location || '').trim());
       payload.append('born', form.born || '');
       payload.append('avatar', form.avatar || '');
       payload.append('type', imagePath ? 'image' : (form.type || 'Poet'));
@@ -431,14 +427,6 @@ export default function AdminHomeFeeds() {
             </View>
           ) : null}
 
-          <TextInput
-            style={styles.input}
-            placeholder="Notification city for local alerts (e.g. Lucknow)"
-            value={form.location || ''}
-            onChangeText={(value) => updateField('location', value)}
-            placeholderTextColor={Colors.light.textSecondary}
-          />
-
           <TextInput style={[styles.input, styles.textarea]} placeholder="Roman version (optional)" value={form.content?.roman || ''} onChangeText={(v) => updateContent('roman', v)} placeholderTextColor={Colors.light.textSecondary} multiline />
           <TextInput style={[styles.input, styles.textarea]} placeholder="Urdu version (optional)" value={form.content?.urdu || ''} onChangeText={(v) => updateContent('urdu', v)} placeholderTextColor={Colors.light.textSecondary} multiline />
           <TextInput style={[styles.input, styles.textarea]} placeholder="Hindi version (optional)" value={form.content?.hindi || ''} onChangeText={(v) => updateContent('hindi', v)} placeholderTextColor={Colors.light.textSecondary} multiline />
@@ -483,7 +471,7 @@ export default function AdminHomeFeeds() {
               <Image source={{ uri: resolveImageUrl(item.avatar || item.image) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800' }} style={styles.rowImage} />
               <View style={{ flex: 1, paddingLeft: 10 }}>
                 <Text style={styles.itemTitle}>{item.poet}</Text>
-                <Text style={styles.itemMeta}>{item.category} • {item.type}{item.location ? ` • ${item.location}` : ''}</Text>
+                <Text style={styles.itemMeta}>{item.category} • {item.type}</Text>
                 <Text style={styles.itemText} numberOfLines={2}>{typeof item.content === 'string' ? item.content : (item.content?.roman || item.content?.urdu || item.content?.hindi || '')}</Text>
                 <View style={styles.orderRow}>
                   <Text style={styles.orderLabel}>Rank #{item.displayOrder || '—'}</Text>

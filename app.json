@@ -4,26 +4,24 @@
     "slug": "MawaddatApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./src/app/assets/images/Mawaddatlogo.png",
+    "icon": "./src/app/assets/images/mawaddat-app-icon.png",
     "scheme": "mawaddatapp",
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "Mawaddat.App.Ios",
-      "icon": "./src/app/assets/images/Mawaddatlogo.png"
+      "icon": "./src/app/assets/images/mawaddat-app-icon.png"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./src/app/assets/images/Mawaddatlogo.png",
-        "backgroundImage": "./src/app/assets/images/Mawaddatlogo.png",
-        "monochromeImage": "./src/app/assets/images/Mawaddatlogo.png"
+        "backgroundColor": "#422215",
+        "foregroundImage": "./src/app/assets/images/mawaddat-app-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "Mawaddat.App"
     },
     "web": {
       "output": "static",
-      "favicon": "./src/app/assets/images/Mawaddatlogo.png"
+      "favicon": "./src/app/assets/images/mawaddat-app-icon.png"
     },
     "plugins": [
       "expo-router",

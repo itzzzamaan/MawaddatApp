@@ -159,15 +159,30 @@ const notifyUsersAboutEvent = async (event) => {
 };
 
 const notifyUsersAboutPost = async (post) => {
-  const city = normalizeCity(post.location);
-  const users = await usersInCity(city);
   const poet =
     post.poet && typeof post.poet === "object" ? post.poet.name : post.poet;
+  const poetId = String(
+    post.poetId || (post.poet && typeof post.poet === "object" ? post.poet._id : ""),
+  ).trim();
   const poetName = String(post.poetName || poet || "").trim();
+  const followerCriteria = [];
+
+  if (poetId) followerCriteria.push({ "followedPoets.id": poetId });
+  if (poetName) {
+    const escapedName = poetName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    followerCriteria.push({
+      "followedPoets.name": new RegExp(`^${escapedName}$`, "i"),
+    });
+  }
+  if (!followerCriteria.length) return [];
+
+  const users = await User.find({ $or: followerCriteria })
+    .select("_id pushTokens")
+    .lean();
   return createNotifications({
     users,
-    title: "New post near you",
-    message: `${poetName || "A new post"} was added in ${post.location}.`,
+    title: "New post from a poet you follow",
+    message: `${poetName || "A poet you follow"} shared a new post.`,
     type: "post",
     targetId: post._id,
   });

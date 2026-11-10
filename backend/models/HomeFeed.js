@@ -15,7 +15,6 @@ const HomeFeedSchema = new Schema({
   poet: Schema.Types.Mixed,
   poetId: String,
   poetName: String,
-  location: String,
   language: String,
   image: String,
   avatar: String,
@@ -23,6 +22,7 @@ const HomeFeedSchema = new Schema({
   type: String,
   category: String,
   likes: { type: Number, default: 0 },
+  likedBy: { type: [String], default: [] },
   comments: {
     type: [CommentSchema],
     default: [],

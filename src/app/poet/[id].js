@@ -29,6 +29,7 @@ const CARD_BG = "#FFFDF9";
 const TEXT_PRIMARY = "#2C1810";
 const TEXT_MUTED = "#5B493D";
 const ACCENT = "#C49A32";
+const isUrduText = (value) => /[\u0600-\u06ff]/.test(String(value || ""));
 
 const CARD_RADIUS = 18;
 const SHADOW = {
@@ -242,18 +243,19 @@ export default function PoetProfile() {
   };
 
   const {
-    savedPosts,
     toggleSavedPost,
     isPostSaved,
     isPoetFollowed,
     toggleFollowedPoet,
+    getPostInteraction,
+    updatePostInteraction,
+    loadPostLikes,
+    togglePostLike,
   } = useSavedPosts();
 
   const [remotePoet, setRemotePoet] = useState(null);
   const [activeCategory, setActiveCategory] = useState("All");
   const [language, setLanguage] = useState("roman");
-  const [following, setFollowing] = useState(Boolean(isPoetFollowed(poetId)));
-  const [likedPosts, setLikedPosts] = useState({});
   const [commentPostId, setCommentPostId] = useState(null);
   const [commentText, setCommentText] = useState("");
   const [editingCommentId, setEditingCommentId] = useState(null);
@@ -294,6 +296,11 @@ export default function PoetProfile() {
         });
 
         setPosts(mapped);
+        try {
+          await loadPostLikes(mapped.map((post) => post.id));
+        } catch (error) {
+          console.error("Failed to load liked post state:", error);
+        }
       } catch (error) {
         console.log("Failed to load poet feed posts:", error);
         setPosts([]);
@@ -302,11 +309,7 @@ export default function PoetProfile() {
 
     loadPoet();
     loadPoetPosts();
-  }, [poetId]);
-
-  useEffect(() => {
-    setFollowing(Boolean(isPoetFollowed(poetId)));
-  }, [poetId, isPoetFollowed]);
+  }, [poetId, loadPostLikes, fallbackPoet.name]);
 
   useEffect(() => {
     const loadCurrentUser = async () => {
@@ -333,21 +336,6 @@ export default function PoetProfile() {
     }));
   };
 
-  useEffect(() => {
-    setPosts((current) => {
-      if (!current.length) return current;
-
-      const next = current.map((post) => ({
-        ...post,
-        saved: isPostSaved(post.id),
-      }));
-
-      return next.some((post, index) => post.saved !== current[index].saved)
-        ? next
-        : current;
-    });
-  }, [savedPosts, isPostSaved]);
-
   const visiblePosts = useMemo(() => {
     if (!posts.length) return [];
 
@@ -364,6 +352,7 @@ export default function PoetProfile() {
   }, [posts, activeCategory]);
 
   const poet = remotePoet || fallbackPoet;
+  const following = isPoetFollowed(poetId);
   const expandedPostData = posts.find((post) => post.id === expandedPost);
   const expandedPostLanguage = expandedPostData
     ? postLanguages[expandedPostData.id] || "roman"
@@ -411,11 +400,12 @@ export default function PoetProfile() {
     }
   };
 
-  const handleLike = (post) => {
-    setLikedPosts((current) => ({
-      ...current,
-      [post.id]: !current[post.id],
-    }));
+  const handleLike = async (post) => {
+    try {
+      await togglePostLike(post.id);
+    } catch (error) {
+      Alert.alert("Unable to update like", error.message || "Please try again.");
+    }
   };
 
   const handleComment = (post) => {
@@ -483,6 +473,10 @@ export default function PoetProfile() {
             : post,
         ),
       );
+      updatePostInteraction(commentPostId, {
+        comments,
+        commentCount: comments.length,
+      });
       setCommentText("");
       setEditingCommentId(null);
       if (!isEditing) setCommentPostId(null);
@@ -537,6 +531,10 @@ export default function PoetProfile() {
                   : post,
               ),
             );
+            updatePostInteraction(commentPostId, {
+              comments,
+              commentCount: comments.length,
+            });
             if (editingCommentId === commentId) {
               setEditingCommentId(null);
               setCommentText("");
@@ -566,7 +564,7 @@ export default function PoetProfile() {
   };
 
   const handleBookmark = (post) => {
-    const wasSaved = Boolean(post.saved) || isPostSaved(post.id);
+    const wasSaved = isPostSaved(post.id);
     const nextSaved = !wasSaved;
 
     setPosts((current) =>
@@ -608,8 +606,14 @@ export default function PoetProfile() {
 
   const handleFollow = () => {
     const nextFollowed = !following;
-    setFollowing(nextFollowed);
-    toggleFollowedPoet(poetId);
+    toggleFollowedPoet({
+      id: poet.id || poetId,
+      name: poet.name,
+      years: poet.years,
+      location: poet.location,
+      image: typeof poet.image === "string" ? poet.image : "",
+      biography: poet.biography,
+    });
     Alert.alert(
       nextFollowed ? "Following Poet" : "Unfollowed Poet",
       nextFollowed
@@ -637,7 +641,11 @@ export default function PoetProfile() {
         <StatusBar barStyle="dark-content" backgroundColor="#C9D9EA" />
         <Navbar />
 
-        <View style={styles.scrollContainer}>
+        <ScrollView
+          style={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.profileHeader}>
             <View style={styles.topActions}>
               <TouchableOpacity
@@ -649,18 +657,7 @@ export default function PoetProfile() {
 
               <View style={styles.profileActions}>
                 <TouchableOpacity
-                  onPress={() => {
-                    const nextValue = !following;
-                    setFollowing(nextValue);
-                    toggleFollowedPoet({
-                      id: poet.id,
-                      name: poet.name,
-                      years: poet.years,
-                      location: poet.location,
-                      image: typeof poet.image === "string" ? poet.image : "",
-                      biography: poet.biography,
-                    });
-                  }}
+                  onPress={handleFollow}
                   style={[
                     styles.followButton,
                     following && styles.followingButton,
@@ -764,10 +761,14 @@ export default function PoetProfile() {
                 </Text>
               </View>
             ) : (
-              visiblePosts.map((post) => {
-                const liked = Boolean(likedPosts[post.id]);
-                const saved = Boolean(post.saved) || isPostSaved(post.id);
-                const likeCount = post.likes + (liked ? 1 : 0);
+              visiblePosts.map((rawPost) => {
+                const post = {
+                  ...rawPost,
+                  ...getPostInteraction(rawPost.id),
+                };
+                const liked = Boolean(post.liked);
+                const saved = isPostSaved(post.id);
+                const likeCount = Number(post.likes || 0);
                 const commentCount = Array.isArray(post.comments)
                   ? post.comments.length || Number(post.commentCount || 0)
                   : Number(post.commentCount || post.comments || 0);
@@ -833,14 +834,6 @@ export default function PoetProfile() {
                     {post.image ? (
                       <View>
                         <SafeImage uri={post.image} style={styles.videoImage} />
-                        <View style={styles.playButton}>
-                          <Ionicons name="play" size={24} color="#FFFFFF" />
-                        </View>
-                        <View style={styles.durationBadge}>
-                          <Text style={styles.durationText}>
-                            {post.duration}
-                          </Text>
-                        </View>
                       </View>
                     ) : null}
 
@@ -850,12 +843,22 @@ export default function PoetProfile() {
                           {String(post.type).toUpperCase()}
                         </Text>
 
-                        <Text style={styles.poetryText} numberOfLines={2}>
+                        <Text
+                          style={[
+                            styles.poetryText,
+                            isUrduText(displayText) && styles.urduText,
+                          ]}
+                          numberOfLines={2}
+                        >
                           {displayText}
                         </Text>
 
                         <Text
-                          style={[styles.poetryText, styles.measurePostText]}
+                          style={[
+                            styles.poetryText,
+                            styles.measurePostText,
+                            isUrduText(displayText) && styles.urduText,
+                          ]}
                           onTextLayout={({ nativeEvent }) => {
                             const hasOverflow = nativeEvent.lines.length > 2;
                             setPostOverflow((current) =>
@@ -964,7 +967,7 @@ export default function PoetProfile() {
               })
             )}
           </View>
-        </View>
+        </ScrollView>
       </View>
       <Modal
         visible={Boolean(expandedPostData)}
@@ -991,7 +994,14 @@ export default function PoetProfile() {
               style={styles.readMoreScroll}
               showsVerticalScrollIndicator
             >
-              <Text style={styles.readMoreModalText}>{expandedPostText}</Text>
+              <Text
+                style={[
+                  styles.readMoreModalText,
+                  isUrduText(expandedPostText) && styles.urduText,
+                ]}
+              >
+                {expandedPostText}
+              </Text>
             </ScrollView>
           </View>
         </View>
@@ -1025,7 +1035,9 @@ export default function PoetProfile() {
             </View>
             <FlatList
               data={
-                posts.find((post) => post.id === commentPostId)?.comments || []
+                getPostInteraction(commentPostId).comments ||
+                posts.find((post) => post.id === commentPostId)?.comments ||
+                []
               }
               keyExtractor={(item) => String(item.id)}
               renderItem={({ item }) => (
@@ -1043,7 +1055,14 @@ export default function PoetProfile() {
                   )}
                   <View style={styles.commentBody}>
                     <Text style={styles.commentUserName}>{item.userName}</Text>
-                    <Text style={styles.commentBodyText}>{item.text}</Text>
+                    <Text
+                      style={[
+                        styles.commentBodyText,
+                        isUrduText(item.text) && styles.urduText,
+                      ]}
+                    >
+                      {item.text}
+                    </Text>
                   </View>
                   {String(item.userId) ===
                   String(currentUser?.id || currentUser?._id || "") ? (
@@ -1093,7 +1112,10 @@ export default function PoetProfile() {
                   editingCommentId ? "Edit your comment..." : "Write a comment..."
                 }
                 placeholderTextColor="#8A6A53"
-                style={styles.commentInput}
+                style={[
+                  styles.commentInput,
+                  isUrduText(commentText) && styles.urduText,
+                ]}
                 multiline
               />
               <TouchableOpacity
@@ -1390,31 +1412,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 170,
     backgroundColor: "#D5D5D5",
-  },
-  playButton: {
-    position: "absolute",
-    alignSelf: "center",
-    top: "35%",
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  durationBadge: {
-    position: "absolute",
-    right: 10,
-    bottom: 10,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: "rgba(0,0,0,0.72)",
-  },
-  durationText: {
-    fontSize: 10,
-    color: "#FFFFFF",
-    fontWeight: "600",
   },
   poetryContainer: {
     position: "relative",

@@ -1,12 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const GOLD = "#C49A32";
@@ -69,6 +63,27 @@ const SECTIONS = [
       "If you have questions, concerns, or requests regarding this Privacy Policy or your data, contact us at support.mawaddat@gmail.com.",
     ],
   },
+  {
+    title: "9. Copyright and Intellectual Property",
+    paragraphs: [
+      "All content available on the Mawaddat application—including but not limited to poetry (shayari), nohas, manqabats, salams, articles, quotes, scholarly writings (tahreer), images, graphics, posters, and user interface designs—is protected under applicable copyright and intellectual property laws.",
+      "Content Ownership: The devotional and literary content featured in the app, contributed by or dedicated to various poets, reciters/nauhakhwans, anjumans, and olema, belongs to its respective copyright holders, creators, or authorized representatives. It is hosted or displayed within the application for personal, non-commercial, and devotional reading and viewing purposes only.",
+      "Poster and Event Uploads: All posters, shayari, and event details on the app are exclusively uploaded and published by the Admin. Users cannot directly upload content or posters into the app. If a user wishes to post an event or poster, they must contact the administrator directly.",
+    ],
+  },
+  {
+    title: "10. Restrictions and Copyright Infringement Claims",
+    paragraphs: [
+      "Restrictions: You may not copy, reproduce, republish, download, redistribute, or exploit any text, posters, graphic content, or materials from this application for commercial use without prior written permission from the respective copyright owners or app administration.",
+      "Copyright Infringement Claims: Mawaddat respects the intellectual property rights of others. If you believe that any content displayed within the application infringes upon your copyright, please contact us at support.mawaddat@gmail.com with the relevant details so that we can review your claim.",
+    ],
+  },
+  {
+    title: "11. Optional Information (Contact Number and Address)",
+    paragraphs: [
+      "You may optionally choose to provide your phone number and physical address within the app. Providing this information is entirely voluntary, and it is collected only if you choose to share it with us to enhance your profile or service experience.",
+    ],
+  },
 ];
 
 export default function PrivacyPolicy() {
@@ -102,9 +117,10 @@ export default function PrivacyPolicy() {
           <Text style={styles.brand}>Mawaddat</Text>
           <Text style={styles.introTitle}>Privacy Policy for Mawaddat</Text>
           <Text style={styles.introText}>
-            Mawaddat (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) is committed to
-            protecting your privacy. This Privacy Policy explains how our
-            mobile application collects, uses, and safeguards your information.
+            Mawaddat (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) is
+            committed to protecting your privacy. This Privacy Policy explains
+            how our mobile application collects, uses, and safeguards your
+            information.
           </Text>
           <Text style={styles.introText}>
             By accessing or using the Mawaddat app, you agree to this Privacy
@@ -124,7 +140,6 @@ export default function PrivacyPolicy() {
             ))}
           </View>
         ))}
-
       </ScrollView>
     </SafeAreaView>
   );

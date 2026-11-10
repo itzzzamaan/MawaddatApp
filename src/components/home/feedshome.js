@@ -30,6 +30,7 @@ const CARD = "#FFFDF9";
 const MUTED = "#5B493D";
 const TEXT = "#2C1810";
 const PANEL = "#F0EAE3";
+const isUrduText = (value) => /[\u0600-\u06ff]/.test(String(value || ""));
 
 const resolveImageUrl = (value) => {
   if (!value) return null;
@@ -280,6 +281,10 @@ export default function Categories({ showOnlySaved = false }) {
     addRecentViewedPost,
     toggleFollowedPoet,
     isPoetFollowed,
+    getPostInteraction,
+    updatePostInteraction,
+    loadPostLikes,
+    togglePostLike,
   } = useSavedPosts();
 
   useEffect(() => {
@@ -299,23 +304,33 @@ export default function Categories({ showOnlySaved = false }) {
     loadCurrentUser();
   }, []);
 
-  const fetchHomeFeeds = async () => {
-    try {
-      const response = await fetch(`${getApiBase()}/api/homefeeds`);
-      const json = await response.json();
-      const data = Array.isArray(json)
-        ? json.map((item) => normalizeBackendFeed(item, currentUser))
-        : [];
-      setPosts(data);
-    } catch (error) {
-      console.log("Failed to load home feeds:", error);
-      setPosts([]);
-    }
-  };
-
   useEffect(() => {
-    fetchHomeFeeds();
-  }, [currentUser]);
+    let active = true;
+    const loadHomeFeeds = async () => {
+      try {
+        const response = await fetch(`${getApiBase()}/api/homefeeds`);
+        const json = await response.json();
+        const data = Array.isArray(json)
+          ? json.map((item) => normalizeBackendFeed(item, currentUser))
+          : [];
+        if (!active) return;
+        setPosts(data);
+        try {
+          await loadPostLikes(data.map((post) => post.id));
+        } catch (error) {
+          console.error("Failed to load liked post state:", error);
+        }
+      } catch (error) {
+        console.log("Failed to load home feeds:", error);
+        if (active) setPosts([]);
+      }
+    };
+
+    loadHomeFeeds();
+    return () => {
+      active = false;
+    };
+  }, [currentUser, loadPostLikes]);
 
   const allSavedPosts = useMemo(
     () =>
@@ -338,37 +353,16 @@ export default function Categories({ showOnlySaved = false }) {
     ? [...posts.filter((post) => isPostSaved(post.id)), ...allSavedPosts]
     : posts;
 
-  useEffect(() => {
-    setPosts((current) =>
-      current.map((post) => ({
-        ...post,
-        saved: savedPosts.some((p) => String(p.id) === String(post.id)),
-        following:
-          Boolean(post.following) ||
-          Boolean(isPoetFollowed(getPoetId(post) || post.poet)),
-      })),
-    );
-  }, [savedPosts, isPoetFollowed]);
-
-  const updatePost = (id, changes) => {
-    setPosts((current) =>
-      current.map((post) => (post.id === id ? { ...post, ...changes } : post)),
-    );
-  };
-
-  const toggleLike = (post) => {
-    updatePost(post.id, {
-      liked: !post.liked,
-      likes: post.likes + (post.liked ? -1 : 1),
-    });
+  const toggleLike = async (post) => {
+    try {
+      await togglePostLike(post.id);
+    } catch (error) {
+      Alert.alert("Unable to update like", error.message || "Please try again.");
+    }
   };
 
   const toggleFollow = (post) => {
     const poetId = getPoetId(post) || post.poet;
-    const nextValue = !(post.following || isPoetFollowed(poetId));
-
-    updatePost(post.id, { following: nextValue });
-
     if (poetId) {
       toggleFollowedPoet({
         id: poetId,
@@ -379,10 +373,6 @@ export default function Categories({ showOnlySaved = false }) {
         biography: "",
       });
     }
-  };
-
-  const toggleSave = (post) => {
-    updatePost(post.id, { saved: !post.saved });
   };
 
   const openComments = (post) => {
@@ -456,6 +446,10 @@ export default function Categories({ showOnlySaved = false }) {
             : post,
         ),
       );
+      updatePostInteraction(commentPostId, {
+        comments: serverComments,
+        commentCount: serverComments.length,
+      });
 
       setCommentText("");
       setEditingCommentId(null);
@@ -511,6 +505,10 @@ export default function Categories({ showOnlySaved = false }) {
                   : post,
               ),
             );
+            updatePostInteraction(commentPostId, {
+              comments: serverComments,
+              commentCount: serverComments.length,
+            });
             if (editingCommentId === commentId) {
               setEditingCommentId(null);
               setCommentText("");
@@ -553,7 +551,13 @@ export default function Categories({ showOnlySaved = false }) {
   };
 
   const renderPost = ({ item }) => {
-    const normalizedItem = normalizeSavedItem(item);
+    const savedItem = normalizeSavedItem(item);
+    const normalizedItem = {
+      ...savedItem,
+      ...getPostInteraction(savedItem.id),
+      saved: isPostSaved(savedItem.id),
+      following: isPoetFollowed(getPoetId(savedItem) || savedItem.poet),
+    };
     const displayContent =
       normalizedItem.content?.[language] || normalizedItem.text || "";
     const commentTotal = getCommentCount(normalizedItem);
@@ -615,22 +619,18 @@ export default function Categories({ showOnlySaved = false }) {
               <View style={styles.photoOverlay}>
                 <Text style={styles.photoLogo}>Mawaddat</Text>
 
-                {normalizedItem.youtubeUrl ? (
-                  <View style={styles.playButtonOverlay}>
-                    <Ionicons name="play" size={28} color="#FFFFFF" />
+                {displayContent.trim() ? (
+                  <View style={styles.photoQuoteContainer}>
+                    <Text
+                      style={[
+                        styles.photoQuote,
+                        isUrduText(displayContent) && styles.urduText,
+                      ]}
+                    >
+                      {displayContent}
+                    </Text>
                   </View>
                 ) : null}
-
-                <View style={styles.photoQuoteContainer}>
-                  <Text
-                    style={[
-                      styles.photoQuote,
-                      language === "urdu" && styles.urduText,
-                    ]}
-                  >
-                    {displayContent}
-                  </Text>
-                </View>
               </View>
             </SafeImage>
           </TouchableOpacity>
@@ -643,7 +643,7 @@ export default function Categories({ showOnlySaved = false }) {
             <Text
               style={[
                 styles.shayariText,
-                language === "urdu" && styles.urduText,
+                isUrduText(displayContent) && styles.urduText,
               ]}
               numberOfLines={expandedPostIds[normalizedItem.id] ? undefined : 4}
             >
@@ -653,7 +653,7 @@ export default function Categories({ showOnlySaved = false }) {
               style={[
                 styles.shayariText,
                 styles.measureText,
-                language === "urdu" && styles.urduText,
+                isUrduText(displayContent) && styles.urduText,
               ]}
               onTextLayout={({ nativeEvent }) => {
                 const hasOverflow = nativeEvent.lines.length > 4;
@@ -753,9 +753,7 @@ export default function Categories({ showOnlySaved = false }) {
           <TouchableOpacity
             style={styles.iconButton}
             onPress={() => {
-              const wasSaved =
-                normalizedItem.saved || isPostSaved(normalizedItem.id);
-              toggleSave(normalizedItem);
+              const wasSaved = isPostSaved(normalizedItem.id);
               toggleSavedPost(normalizedItem);
 
               Alert.alert(
@@ -836,6 +834,7 @@ export default function Categories({ showOnlySaved = false }) {
 
               <FlatList
                 data={
+                  getPostInteraction(commentPostId).comments ||
                   posts.find((post) => post.id === commentPostId)?.comments ||
                   []
                 }
@@ -848,7 +847,14 @@ export default function Categories({ showOnlySaved = false }) {
                     />
                     <View style={styles.commentContent}>
                       <Text style={styles.commentUser}>{item.userName}</Text>
-                      <Text style={styles.commentText}>{item.text}</Text>
+                      <Text
+                        style={[
+                          styles.commentText,
+                          isUrduText(item.text) && styles.urduText,
+                        ]}
+                      >
+                        {item.text}
+                      </Text>
                     </View>
                     {String(item.userId) ===
                     String(currentUser?.id || currentUser?._id || "") ? (
@@ -889,7 +895,10 @@ export default function Categories({ showOnlySaved = false }) {
                   onChangeText={setCommentText}
                   placeholder={editingCommentId ? "Edit your comment..." : "Write a comment..."}
                   placeholderTextColor="#8A6A53"
-                  style={styles.commentInput}
+                  style={[
+                    styles.commentInput,
+                    isUrduText(commentText) && styles.urduText,
+                  ]}
                   multiline
                 />
                 <TouchableOpacity
@@ -1058,6 +1067,7 @@ const styles = StyleSheet.create({
     fontSize: wp(5),
     lineHeight: wp(6.2),
     textAlign: "right",
+    writingDirection: "rtl",
     fontFamily: "Hindi",
   },
   photoPost: {
@@ -1086,11 +1096,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "700",
     letterSpacing: 1,
-  },
-  playButtonOverlay: {
-    position: "absolute",
-    alignSelf: "center",
-    top: "38%",
   },
   photoQuoteContainer: {
     backgroundColor: "rgba(255,255,255,0.14)",

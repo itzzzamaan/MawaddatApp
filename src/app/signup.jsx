@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import {
   Keyboard,
   KeyboardAvoidingView,
+  Image,
   Platform,
   ScrollView,
   StatusBar,
@@ -109,6 +110,14 @@ export default function SignUp() {
           >
           {/* ================= HEADER ================= */}
           <View style={styles.header}>
+            <Image
+              source={require("./assets/images/mawaddat-app-icon.png")}
+              style={styles.brandLogo}
+              resizeMode="contain"
+              accessibilityLabel="Mawaddat logo"
+            />
+            <Text style={styles.brandName}>Mawaddat</Text>
+            <Text style={styles.tagline}>Poetry, devotion, and community</Text>
             <Text style={styles.heading}>Welcome New User</Text>
             <Text style={styles.subheading}>
               Create your account to continue
@@ -198,40 +207,79 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.background,
-    paddingTop: -12,
+    paddingTop: 0,
   },
 
   scrollContent: {
     flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 18,
   },
 
   /* ---------- Header ---------- */
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: hp("5%"),
+    width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 22,
+  },
+
+  brandLogo: {
+    width: 84,
+    height: 84,
+    marginBottom: 8,
+    borderRadius: 22,
+  },
+
+  brandName: {
+    color: Colors.light.text,
+    fontSize: wp("5.5%"),
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+
+  tagline: {
+    color: Colors.light.textSecondary,
+    fontSize: wp("3.4%"),
+    marginTop: 4,
+    marginBottom: 22,
   },
   heading: {
-    fontSize: hp("4%"),
-    fontWeight: "700",
-    color: Colors.light.textSecondary,
+    fontSize: hp("3.6%"),
+    fontWeight: "800",
+    color: Colors.light.text,
+    textAlign: "center",
   },
   subheading: {
     fontSize: wp("3.6%"),
     color: Colors.light.textSecondary,
     marginTop: 6,
+    textAlign: "center",
   },
 
   /* ---------- Card ---------- */
   card: {
-    flex: 1,
+    width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
     minHeight: 420,
     backgroundColor: Colors.light.backgroundElement,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 30,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Colors.light.backgroundSelected,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 22,
     justifyContent: "space-between",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 3,
   },
 
   label: {

@@ -81,6 +81,7 @@ export function SavedPostsProvider({ children }) {
   const [followedPoets, setFollowedPoets] = useState([]);
   const [followedPoetsLoaded, setFollowedPoetsLoaded] = useState(false);
   const [savedPrograms, setSavedPrograms] = useState([]);
+  const [postInteractions, setPostInteractions] = useState({});
 
   useEffect(() => {
     const loadSavedPosts = async () => {
@@ -320,6 +321,68 @@ export function SavedPostsProvider({ children }) {
     [followedPoets]
   );
 
+  const updatePostInteraction = useCallback((postId, changes) => {
+    if (!postId || !changes) return;
+    const id = String(postId);
+    setPostInteractions((current) => ({
+      ...current,
+      [id]: { ...current[id], ...changes },
+    }));
+  }, []);
+
+  const getPostInteraction = useCallback(
+    (postId) => postInteractions[String(postId)] || {},
+    [postInteractions]
+  );
+
+  const loadPostLikes = useCallback(async (postIds) => {
+    const token = await SecureStore.getItemAsync("user_token");
+    if (!token) return;
+
+    const response = await fetch(`${getApiBase()}/api/homefeeds/liked`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load liked posts (${response.status})`);
+    }
+
+    const data = await response.json();
+    const likedIds = new Set(
+      Array.isArray(data.likedPostIds) ? data.likedPostIds.map(String) : [],
+    );
+    setPostInteractions((current) => {
+      const next = { ...current };
+      postIds.forEach((postId) => {
+        const id = String(postId);
+        next[id] = { ...next[id], liked: likedIds.has(id) };
+      });
+      return next;
+    });
+  }, []);
+
+  const togglePostLike = useCallback(async (postId) => {
+    const token = await SecureStore.getItemAsync("user_token");
+    if (!token) throw new Error("Please sign in again to like posts.");
+
+    const response = await fetch(
+      `${getApiBase()}/api/homefeeds/${encodeURIComponent(postId)}/like`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data?.message || "Unable to update post like.");
+    }
+
+    updatePostInteraction(postId, {
+      liked: Boolean(data.liked),
+      likes: Number(data.likes) || 0,
+    });
+    return data;
+  }, [updatePostInteraction]);
+
   const value = useMemo(
     () => ({
       savedPosts,
@@ -333,8 +396,13 @@ export function SavedPostsProvider({ children }) {
       isProgramSaved,
       isPostSaved,
       isPoetFollowed,
+      postInteractions,
+      getPostInteraction,
+      updatePostInteraction,
+      loadPostLikes,
+      togglePostLike,
     }),
-    [savedPosts, recentViewedPosts, followedPoets, savedPrograms, toggleSavedPost, addRecentViewedPost, toggleFollowedPoet, toggleSavedProgram, isProgramSaved, isPostSaved, isPoetFollowed]
+    [savedPosts, recentViewedPosts, followedPoets, savedPrograms, postInteractions, toggleSavedPost, addRecentViewedPost, toggleFollowedPoet, toggleSavedProgram, isProgramSaved, isPostSaved, isPoetFollowed, getPostInteraction, updatePostInteraction, loadPostLikes, togglePostLike]
   );
 
   return (

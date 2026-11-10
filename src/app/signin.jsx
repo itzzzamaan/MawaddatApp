@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -135,8 +136,21 @@ const SignIn = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.formContainer}>
+      <ScrollView
+        contentContainerStyle={styles.screenContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.formContainer}>
         <View style={styles.header}>
+          <Image
+            source={require("./assets/images/mawaddat-app-icon.png")}
+            style={styles.brandLogo}
+            resizeMode="contain"
+            accessibilityLabel="Mawaddat logo"
+          />
+          <Text style={styles.brandName}>Mawaddat</Text>
+          <Text style={styles.tagline}>Poetry, devotion, and community</Text>
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>
             Login using your email and password
@@ -144,10 +158,7 @@ const SignIn = () => {
         </View>
 
         <View style={styles.innerContainer}>
-          <ScrollView
-            contentContainerStyle={styles.formContent}
-            keyboardShouldPersistTaps="handled"
-          >
+          <View style={styles.formContent}>
             <Text style={styles.label}>Email</Text>
             <View style={styles.inputContainer}>
               <TextInput
@@ -175,16 +186,16 @@ const SignIn = () => {
 
             <GoogleAuthButton />
 
-            {/* <TouchableOpacity
+            <TouchableOpacity
               style={styles.forgotPasswordButton}
               onPress={() => router.push("/Forgot-password")}
               accessibilityRole="button"
             >
               <Text style={styles.forgotPasswordText}>Forgot password?</Text>
-            </TouchableOpacity> */}
+            </TouchableOpacity>
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
-          </ScrollView>
+          </View>
 
           <View style={styles.footer}>
             <TouchableOpacity
@@ -200,15 +211,16 @@ const SignIn = () => {
               )}
             </TouchableOpacity>
 
-            {/* <View style={styles.signup}>
+            <View style={styles.signup}>
               <Text style={styles.signupLabel}>Don’t have an account?</Text>
               <TouchableOpacity onPress={() => router.push("/signup")}>
                 <Text style={styles.signupText}> Sign Up</Text>
               </TouchableOpacity>
-            </View> */}
+            </View>
           </View>
         </View>
-      </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -218,35 +230,69 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.background,
   },
+  screenContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+  },
   formContainer: {
-    flex: 1,
     width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
   },
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: hp("4%"),
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 22,
+  },
+  brandLogo: {
+    width: 84,
+    height: 84,
+    marginBottom: 8,
+    borderRadius: 22,
+  },
+  brandName: {
+    color: Colors.light.text,
+    fontSize: wp("5.5%"),
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  tagline: {
+    color: Colors.light.textSecondary,
+    fontSize: wp("3.4%"),
+    marginTop: 4,
+    marginBottom: 22,
   },
   title: {
-    fontSize: hp("4%"),
-    fontWeight: "700",
-    color: Colors.light.textSecondary,
+    fontSize: hp("3.6%"),
+    fontWeight: "800",
+    color: Colors.light.text,
+    textAlign: "center",
   },
   subtitle: {
     fontSize: wp("3.6%"),
     color: Colors.light.textSecondary,
-    marginTop: 6,
+    marginTop: 7,
+    textAlign: "center",
   },
   innerContainer: {
-    flex: 1,
     backgroundColor: Colors.light.backgroundElement,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    justifyContent: "space-between",
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 8,
+    borderWidth: 1,
+    borderColor: Colors.light.backgroundSelected,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 3,
   },
   formContent: {
-    paddingBottom: 20,
+    paddingBottom: 8,
   },
   label: {
     fontSize: wp("3.6%"),
@@ -280,7 +326,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   footer: {
-    paddingBottom: 24,
+    paddingBottom: 16,
   },
   continueBtn: {
     backgroundColor: Colors.light.text,

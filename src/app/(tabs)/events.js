@@ -180,7 +180,7 @@ export default function ShayariEvents() {
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
 
   const { currentCity } = useCurrentLocation();
-  const { savedPrograms, toggleSavedProgram, isProgramSaved } = useSavedPosts();
+  const { toggleSavedProgram, isProgramSaved } = useSavedPosts();
 
   const categories = useMemo(
     () => [
@@ -228,20 +228,41 @@ export default function ShayariEvents() {
     const query = search.trim().toLowerCase();
 
     return events.filter((item) => {
-      // "All" means every event; other categories stay scoped to the current city.
+      const eventLocation = [
+        item.location,
+        item.venue,
+        item.completeAddress,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const matchesSearchedLocation =
+        Boolean(query) &&
+        [item.venue, item.location, item.completeAddress]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query));
       const matchesCity =
-        activeCategory === "All" ||
         !currentCity ||
-        (item.venue || "").toLowerCase().includes(currentCity.toLowerCase());
+        eventLocation.includes(currentCity.toLowerCase()) ||
+        matchesSearchedLocation;
 
       const matchesCategory =
-        activeCategory === "All" || (item.category || "") === activeCategory;
+        activeCategory === "All" ||
+        String(item.category || "").trim().toLowerCase() ===
+          activeCategory.trim().toLowerCase();
 
       const matchesSearch =
         !query ||
-        (item.title || "").toLowerCase().includes(query) ||
-        (item.subtitle || "").toLowerCase().includes(query) ||
-        (item.venue || "").toLowerCase().includes(query);
+        [
+          item.title,
+          item.subtitle,
+          item.venue,
+          item.location,
+          item.completeAddress,
+          item.host,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query));
 
       const matchesFavorite =
         !favoritesOnly || isProgramSaved(item._id || item.id);

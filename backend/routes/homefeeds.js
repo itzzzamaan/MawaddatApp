@@ -3,7 +3,6 @@ const router = express.Router();
 const HomeFeed = require("../models/HomeFeed");
 const {
   notifyUsersAboutPost,
-  normalizeNotificationCity,
 } = require("../notificationService");
 const { saveImageAsset } = require("../database");
 const auth = require("../middleware/auth");
@@ -143,6 +142,7 @@ const normalizePublicImageUrl = (value, req) => {
 const serializeHomeFeed = (item, req) => {
   if (!item) return item;
   const data = { ...item.toObject ? item.toObject() : item };
+  delete data.likedBy;
   if (data.image) data.image = normalizePublicImageUrl(data.image, req);
   if (data.avatar) data.avatar = normalizePublicImageUrl(data.avatar, req);
   return data;
@@ -174,7 +174,7 @@ router.post(
     try {
       let body = normalizeHomeFeedBody(req.body || {});
       delete body.displayOrder;
-      body.location = normalizeNotificationCity(body.location);
+      delete body.location;
       if (
         typeof body.poet !== "string" ||
         !body.poet.trim() ||
@@ -219,6 +219,20 @@ router.patch("/:id/order", auth, adminOnly, async (req, res) => {
   }
 });
 
+router.get("/liked", userAuth, async (req, res) => {
+  try {
+    const likedPosts = await HomeFeed.find({ likedBy: String(req.user.id) })
+      .select("_id")
+      .lean();
+    return res.json({
+      likedPostIds: likedPosts.map((post) => String(post._id)),
+    });
+  } catch (error) {
+    console.error("List liked posts failed:", error.name || "UnknownError");
+    return res.status(500).json({ message: "Unable to load liked posts." });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   const item = await HomeFeed.findById(req.params.id);
   if (!item) return res.status(404).json({ message: "Home feed not found" });
@@ -230,6 +244,46 @@ router.get("/:id", async (req, res) => {
   });
 });
 
+router.post("/:id/like", userAuth, async (req, res) => {
+  try {
+    const userId = String(req.user.id);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const post = await HomeFeed.findById(req.params.id)
+        .select("likedBy likes")
+        .lean();
+      if (!post) return res.status(404).json({ message: "Post not found." });
+
+      const alreadyLiked = (post.likedBy || []).some(
+        (id) => String(id) === userId,
+      );
+      const result = await HomeFeed.updateOne(
+        {
+          _id: post._id,
+          likedBy: alreadyLiked ? userId : { $ne: userId },
+        },
+        alreadyLiked
+          ? { $pull: { likedBy: userId }, $inc: { likes: -1 } }
+          : { $addToSet: { likedBy: userId }, $inc: { likes: 1 } },
+      );
+
+      if (result.modifiedCount) {
+        const updated = await HomeFeed.findById(post._id).select("likes").lean();
+        return res.json({
+          liked: !alreadyLiked,
+          likes: Number(updated?.likes || 0),
+        });
+      }
+    }
+
+    return res.status(409).json({
+      message: "Unable to update the like right now. Please try again.",
+    });
+  } catch (error) {
+    console.error("Toggle homefeed like failed:", error.name || "UnknownError");
+    return res.status(500).json({ message: "Unable to update post like." });
+  }
+});
+
 router.put(
   "/:id",
   auth,
@@ -238,9 +292,7 @@ router.put(
     try {
       let body = normalizeHomeFeedBody(req.body || {});
       delete body.displayOrder;
-      if (Object.prototype.hasOwnProperty.call(body, "location")) {
-        body.location = normalizeNotificationCity(body.location);
-      }
+      delete body.location;
       if (
         typeof body.poet !== "string" ||
         !body.poet.trim() ||

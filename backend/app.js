@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const { connectToDatabase } = require("./database");
+const Event = require("./models/Event");
 
 const authRoutes = require("./routes/auth");
 const eventsRoutes = require("./routes/events");
@@ -136,6 +137,31 @@ app.get("/share/poet/:id", async (req, res) => {
   } catch (error) {
     console.error("Poet share page failed:", error.name || "UnknownError");
     return res.status(500).send("Unable to load this Mawaddat profile.");
+  }
+});
+
+app.get("/share/event/:id", async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).send("Event not found.");
+    const details = [
+      event.date,
+      event.time,
+      event.venue,
+      event.location,
+      event.subtitle,
+    ]
+      .filter(Boolean)
+      .join(" • ");
+    return renderSharePage(req, res, {
+      title: event.title || "Mawaddat event",
+      description: details || event.description || "Discover this event on Mawaddat.",
+      image: getShareImageUrl(event.image, req),
+      deepLink: `mawaddatapp://eventsdetail?eventId=${encodeURIComponent(String(event._id))}`,
+    });
+  } catch (error) {
+    console.error("Event share page failed:", error.name || "UnknownError");
+    return res.status(500).send("Unable to load this Mawaddat event.");
   }
 });
 

@@ -1,4 +1,3 @@
-
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -15,8 +14,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getApiBase, normalizeImageUrl } from "../utils/api";
 import SafeImage from "../components/SafeImage";
+import { useSavedPosts } from "../contexts/SavedPostsContext";
+import { getApiBase, normalizeImageUrl } from "../utils/api";
 
 const ACCENT = "#2C1810";
 const BACKGROUND = "#F7F2EC";
@@ -47,10 +47,10 @@ export default function ShayariEventDetails() {
     ? params.eventId[0]
     : params.eventId;
 
-  const [isFavorite, setIsFavorite] = useState(false);
   const [activeSection, setActiveSection] = useState("About");
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { toggleSavedProgram, isProgramSaved } = useSavedPosts();
 
   useEffect(() => {
     const loadEvent = async () => {
@@ -64,10 +64,7 @@ export default function ShayariEventDetails() {
         const data = await response.json();
 
         const matches = Array.isArray(data)
-          ? data.find(
-              (item) =>
-                String(item._id || item.id) === String(eventId)
-            )
+          ? data.find((item) => String(item._id || item.id) === String(eventId))
           : null;
 
         setEvent(matches || null);
@@ -94,8 +91,22 @@ export default function ShayariEventDetails() {
     if (!event) return;
 
     try {
+      const eventShareUrl = `${getApiBase()}/share/event/${encodeURIComponent(
+        String(event._id || event.id),
+      )}`;
       await Share.share({
-        message: `${event.title}\n${event.subtitle || ""}\n${event.date || ""}\n${event.time || ""}\n${event.venue || ""}`,
+        title: `${event.title || "Event"} | Mawaddat`,
+        message: [
+          event.title,
+          event.subtitle,
+          event.date,
+          event.time,
+          event.venue,
+          eventShareUrl,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        url: eventShareUrl,
       });
     } catch {
       Alert.alert("Unable to share", "Please try again.");
@@ -109,15 +120,15 @@ export default function ShayariEventDetails() {
     const body = [
       "Hello Mawaddat Events Team,",
       "",
-      "I would like to enquire about registering for this program:",
+      "I would like to enquire about registering for my program:",
       "",
-      `Program: ${event.title || "Not specified"}`,
-      `Category: ${event.category || "Not specified"}`,
-      `Date: ${event.date || "To be announced"}`,
-      `Time: ${event.time || "To be announced"}`,
-      `Venue: ${event.venue || "To be announced"}`,
-      `Address: ${event.completeAddress || event.venue || "To be announced"}`,
-      `Host: ${event.host || "Not specified"}`,
+      `Program: ${" "}`,
+      `Category: ${" "}`,
+      `Date: ${" "}`,
+      `Time: ${" "}`,
+      `Venue: ${" "}`,
+      `Address: ${" "}`,
+      `Host: ${" "}`,
       "",
       "Please share the registration process, availability, and any fees or other details I should know.",
       "",
@@ -141,7 +152,7 @@ export default function ShayariEventDetails() {
       console.error("Could not open program enquiry email:", error);
       Alert.alert(
         "Email unavailable",
-        "Please email event.mawaddat@gmail.com with your program enquiry."
+        "Please email event.mawaddat@gmail.com with your program enquiry.",
       );
     }
   };
@@ -152,7 +163,7 @@ export default function ShayariEventDetails() {
     if (!/^https?:\/\//i.test(mapsLink)) {
       Alert.alert(
         "Map unavailable",
-        "A valid map link has not been provided for this event."
+        "A valid map link has not been provided for this event.",
       );
       return;
     }
@@ -160,10 +171,7 @@ export default function ShayariEventDetails() {
     try {
       await Linking.openURL(mapsLink);
     } catch {
-      Alert.alert(
-        "Unable to open map",
-        "Please try the map link again."
-      );
+      Alert.alert("Unable to open map", "Please try the map link again.");
     }
   };
 
@@ -183,11 +191,7 @@ export default function ShayariEventDetails() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.notFound}>
           <View style={styles.notFoundIcon}>
-            <Ionicons
-              name="calendar-outline"
-              size={38}
-              color={ACCENT}
-            />
+            <Ionicons name="calendar-outline" size={38} color={ACCENT} />
           </View>
 
           <Text style={styles.notFoundTitle}>Event not found</Text>
@@ -212,9 +216,8 @@ export default function ShayariEventDetails() {
     ? normalizeImageUrl(event.image)
     : "https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=1200";
 
-  const highlights = Array.isArray(event.highlights)
-    ? event.highlights
-    : [];
+  const highlights = Array.isArray(event.highlights) ? event.highlights : [];
+  const isFavorite = isProgramSaved(event._id || event.id);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
@@ -224,7 +227,11 @@ export default function ShayariEventDetails() {
       >
         {/* Hero */}
         <View style={styles.heroContainer}>
-          <SafeImage uri={heroImage} style={styles.heroImage} resizeMode="cover" />
+          <SafeImage
+            uri={heroImage}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
 
           <View style={styles.heroShade} />
 
@@ -252,7 +259,7 @@ export default function ShayariEventDetails() {
 
               <Pressable
                 style={styles.roundButton}
-                onPress={() => setIsFavorite((value) => !value)}
+                onPress={() => toggleSavedProgram(event)}
                 accessibilityLabel={
                   isFavorite ? "Remove favorite" : "Add favorite"
                 }
@@ -302,7 +309,7 @@ export default function ShayariEventDetails() {
             <View style={styles.titleTextContainer}>
               <Text style={styles.eventName}>{event.title}</Text>
               <Text style={styles.eventIntro}>
-                Make memories that stay with you. 
+                Make memories that stay with you.
               </Text>
             </View>
 
@@ -311,7 +318,7 @@ export default function ShayariEventDetails() {
                 styles.favoriteLarge,
                 isFavorite && styles.favoriteSelected,
               ]}
-              onPress={() => setIsFavorite((value) => !value)}
+              onPress={() => toggleSavedProgram(event)}
               accessibilityLabel={
                 isFavorite ? "Remove favorite" : "Add favorite"
               }
@@ -360,11 +367,7 @@ export default function ShayariEventDetails() {
               </View>
 
               <View style={styles.locationHeadingIcon}>
-                <Ionicons
-                  name="navigate-outline"
-                  size={19}
-                  color={ACCENT}
-                />
+                <Ionicons name="navigate-outline" size={19} color={ACCENT} />
               </View>
             </View>
 
@@ -381,11 +384,7 @@ export default function ShayariEventDetails() {
                   <View style={styles.mapDecorCircleSmall} />
 
                   <View style={styles.mapPinCircle}>
-                    <Ionicons
-                      name="location"
-                      size={32}
-                      color={ACCENT}
-                    />
+                    <Ionicons name="location" size={32} color={ACCENT} />
                   </View>
 
                   <Text style={styles.mapPlaceholderTitle}>
@@ -393,20 +392,16 @@ export default function ShayariEventDetails() {
                   </Text>
 
                   <Text style={styles.mapPlaceholderText}>
-                    {event.completeAddress || event.venue || "Location to be announced"}
+                    {event.completeAddress ||
+                      event.venue ||
+                      "Location to be announced"}
                   </Text>
-
-                  
                 </View>
               )}
 
               <View style={styles.mapCaption}>
                 <View style={styles.mapCaptionIcon}>
-                  <Ionicons
-                    name="location"
-                    size={19}
-                    color={ACCENT}
-                  />
+                  <Ionicons name="location" size={19} color={ACCENT} />
                 </View>
 
                 <View style={styles.mapCaptionContent}>
@@ -429,15 +424,7 @@ export default function ShayariEventDetails() {
               >
                 <Ionicons name="navigate" size={18} color="#FFFFFF" />
 
-                <Text style={styles.mapsButtonText}>
-                  Open in Google Maps
-                </Text>
-
-                <Ionicons
-                  name="arrow-up-right"
-                  size={19}
-                  color="#FFFFFF"
-                />
+                <Text style={styles.mapsButtonText}>Open in Google Maps</Text>
               </Pressable>
             </View>
           </View>
@@ -463,10 +450,7 @@ export default function ShayariEventDetails() {
                 <Pressable
                   key={section.name}
                   onPress={() => setActiveSection(section.name)}
-                  style={[
-                    styles.tab,
-                    selected && styles.tabActive,
-                  ]}
+                  style={[styles.tab, selected && styles.tabActive]}
                 >
                   <Ionicons
                     name={section.icon}
@@ -475,10 +459,7 @@ export default function ShayariEventDetails() {
                   />
 
                   <Text
-                    style={[
-                      styles.tabText,
-                      selected && styles.tabTextActive,
-                    ]}
+                    style={[styles.tabText, selected && styles.tabTextActive]}
                   >
                     {section.name}
                   </Text>
@@ -524,9 +505,7 @@ export default function ShayariEventDetails() {
                     ))}
                   </View>
                 ) : (
-                  <Text style={styles.bodyText}>
-                    No highlights available.
-                  </Text>
+                  <Text style={styles.bodyText}>No highlights available.</Text>
                 )}
               </View>
             )}
@@ -534,11 +513,7 @@ export default function ShayariEventDetails() {
 
           {/* Existing registration interaction */}
           <View style={styles.bottomNote}>
-            <Ionicons
-              name="heart-outline"
-              size={17}
-              color={MUTED}
-            />
+            <Ionicons name="heart-outline" size={17} color={MUTED} />
 
             <Text style={styles.bottomNoteText}>
               Good moments are even better when shared.
@@ -560,20 +535,12 @@ export default function ShayariEventDetails() {
               />
             </View>
 
-            <Text style={styles.primaryButtonText}>
-              Register interest
-            </Text>
+            <Text style={styles.primaryButtonText}>Mail Us For Your Order</Text>
 
-            <Ionicons
-              name="arrow-forward"
-              size={19}
-              color="#FFFFFF"
-            />
+            <Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
           </Pressable>
 
-          <Text style={styles.footerText}>
-            MADE FOR MOMENTS THAT MATTER
-          </Text>
+          <Text style={styles.footerText}>MADE FOR MOMENTS THAT MATTER</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -589,11 +556,7 @@ function EventInfoRow({ icon, label, value }) {
 
       <Text style={styles.infoLabel}>{label}</Text>
 
-      <Text
-        style={styles.infoValue}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
+      <Text style={styles.infoValue} numberOfLines={1} ellipsizeMode="tail">
         {value}
       </Text>
     </View>

@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 
+import Navbar from "../../components/Navbar";
 import SafeImage from "../../components/SafeImage";
 import { getApiBase, normalizeImageUrl } from "../../utils/api";
 
@@ -327,6 +328,7 @@ export default function SearchScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <Navbar />
       <View style={styles.header}>
         <Text style={styles.heading}>Search</Text>
         <Text style={styles.description}>Find poets, kalaam, and articles</Text>
@@ -478,7 +480,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 8,
   },
   heading: {
     color: COLORS.text,
@@ -510,13 +512,17 @@ const styles = StyleSheet.create({
   },
   filters: {
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 8,
     gap: 8,
+    alignItems: "center",
   },
   filterChip: {
-    borderRadius: 18,
+    height: 32,
+    minHeight: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 8,
     backgroundColor: COLORS.chip,
   },
   filterChipActive: {
@@ -524,8 +530,10 @@ const styles = StyleSheet.create({
   },
   filterText: {
     color: COLORS.muted,
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: "600",
+    includeFontPadding: false,
   },
   filterTextActive: {
     color: "#FFFFFF",

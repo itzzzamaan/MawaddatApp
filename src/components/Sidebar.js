@@ -6,6 +6,7 @@ import { unregisterPushDevice } from "../utils/notifications";
 import {
   Animated,
   Dimensions,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -27,6 +28,7 @@ const Sidebar = ({ visible, onClose, username: usernameProp }) => {
   const router = useRouter();
   const pathname = usePathname();
   const [username, setUsername] = useState(usernameProp || "Shayari Lover");
+  const [profileImage, setProfileImage] = useState("");
 
   const translateX = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
@@ -52,21 +54,27 @@ const Sidebar = ({ visible, onClose, username: usernameProp }) => {
         const profileRaw = await SecureStore.getItemAsync("user_profile");
         const accountRaw = await SecureStore.getItemAsync("user_account");
 
-        const raw = profileRaw || accountRaw;
-        if (raw) {
-          const user = JSON.parse(raw);
+        const profile = profileRaw ? JSON.parse(profileRaw) : {};
+        const account = accountRaw ? JSON.parse(accountRaw) : {};
+        const user = { ...account, ...profile };
+        if (profileRaw || accountRaw) {
           const nextName =
             user?.fullName ||
             user?.name ||
             user?.email?.split("@")[0] ||
             "Shayari Lover";
+          const nextImage =
+            user?.imageUri || user?.avatar || user?.profileImage || user?.image || "";
           setUsername(nextName.trim() || "Shayari Lover");
+          setProfileImage(typeof nextImage === "string" ? nextImage : "");
           return;
         }
 
         setUsername(usernameProp || "Shayari Lover");
+        setProfileImage("");
       } catch (e) {
         setUsername(usernameProp || "Shayari Lover");
+        setProfileImage("");
       }
     })();
   }, [usernameProp, visible]);
@@ -124,13 +132,19 @@ const Sidebar = ({ visible, onClose, username: usernameProp }) => {
         {/* Profile Header */}
         <View style={styles.header}>
           <View style={styles.profileRow}>
-            <View style={styles.avatar}>
-              <Ionicons
-                name="person"
-                size={27}
-                color={PRIMARY}
+            {profileImage ? (
+              <Image
+                source={{ uri: profileImage }}
+                style={styles.avatar}
+                resizeMode="cover"
+                accessibilityLabel="Profile picture"
+                onError={() => setProfileImage("")}
               />
-            </View>
+            ) : (
+              <View style={styles.avatar}>
+                <Ionicons name="person" size={27} color={PRIMARY} />
+              </View>
+            )}
 
             <View style={styles.profileInfo}>
               <Text style={styles.username} numberOfLines={1}>
@@ -183,8 +197,10 @@ const Sidebar = ({ visible, onClose, username: usernameProp }) => {
 
         <ScrollView
           style={styles.menuScroll}
-          showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.menuContent}
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
         >
           {/* Explore */}
           <Text style={styles.sectionTitle}>DISCOVER</Text>
@@ -306,7 +322,7 @@ const MenuItem = ({ icon, text, active, onPress }) => (
   >
     <MaterialCommunityIcons
       name={icon}
-      size={21}
+      size={19}
       color={active ? PRIMARY : "#686868"}
     />
 
@@ -341,8 +357,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8F6F2",
     marginTop: Platform.OS === "android" ? -62 : -32,
     paddingTop: Platform.OS === "android" ? 18 : 20,
-    paddingHorizontal: 17,
-    paddingBottom: Platform.OS === "android" ? 12 : 20,
+    paddingHorizontal: 14,
+    paddingBottom: Platform.OS === "android" ? 10 : 14,
     elevation: 15,
     shadowColor: "#000000",
     shadowOffset: { width: 4, height: 0 },
@@ -446,10 +462,12 @@ const styles = StyleSheet.create({
 
   menuScroll: {
     flex: 1,
+    minHeight: 0,
   },
 
   menuContent: {
-    paddingBottom: 10,
+    flexGrow: 1,
+    paddingBottom: 8,
   },
 
   sectionTitle: {
@@ -457,19 +475,19 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: MUTED,
     letterSpacing: 1.2,
-    marginTop: 5,
-    marginBottom: 10,
-    marginLeft: 5,
+    marginTop: 4,
+    marginBottom: 7,
+    marginLeft: 4,
   },
 
   menuItem: {
-    minHeight: 47,
+    minHeight: 42,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 5,
-    gap: 13,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    marginBottom: 3,
+    gap: 10,
     backgroundColor: "#FFFFFF",
   },
 
@@ -483,7 +501,7 @@ const styles = StyleSheet.create({
 
   menuText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "500",
     color: DARK,
   },
@@ -494,20 +512,20 @@ const styles = StyleSheet.create({
   },
 
   activeIndicator: {
-    width: 4,
-    height: 23,
-    borderRadius: 3,
+    width: 3,
+    height: 20,
+    borderRadius: 2,
     backgroundColor: PRIMARY,
   },
 
   footer: {
-    marginTop: 15,
+    marginTop: 10,
   },
 
   footerDivider: {
     height: 1,
     backgroundColor: "#EEEEEE",
-    marginBottom: 15,
+    marginBottom: 10,
   },
 
   logoutBtn: {
@@ -517,13 +535,13 @@ const styles = StyleSheet.create({
     gap: 9,
     backgroundColor: "#F0EAE3",
     borderRadius: 12,
-    paddingVertical: 13,
+    paddingVertical: 10,
   },
 
   logoutText: {
     color: "#A35A00",
     fontWeight: "700",
-    fontSize: 14,
+    fontSize: 13,
   },
 
   versionText: {
